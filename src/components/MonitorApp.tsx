@@ -517,6 +517,11 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
 
   const canUseSuperAdmin = isSuperAdminEmail(user?.email);
 
+  function selectTab(nextTab: ActiveTab) {
+    setActiveTab(nextTab);
+    setBanner(null);
+  }
+
   const planRequiredCard = (featureTitle: string) => (
     <div className="rounded-2xl bg-white p-7 sm:p-9">
       <span className="inline-block rounded-xl bg-[#FEF3C7] px-4 py-1.5 text-base font-bold text-[#78350F]">
@@ -575,7 +580,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
                 <button
                   type="button"
-                  onClick={() => setActiveTab("slots")}
+                  onClick={() => selectTab("slots")}
                   className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
                     activeTab === "slots"
                       ? "bg-[#1447E6] text-white"
@@ -596,7 +601,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
 
                 <button
                   type="button"
-                  onClick={() => setActiveTab("alerts")}
+                  onClick={() => selectTab("alerts")}
                   className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
                     activeTab === "alerts"
                       ? "bg-[#1447E6] text-white"
@@ -617,7 +622,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
 
                 <button
                   type="button"
-                  onClick={() => setActiveTab("account")}
+                  onClick={() => selectTab("account")}
                   className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
                     activeTab === "account"
                       ? "bg-[#1447E6] text-white"
@@ -640,7 +645,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
 
                 <button
                   type="button"
-                  onClick={() => setActiveTab("reserve")}
+                  onClick={() => selectTab("reserve")}
                   className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
                     activeTab === "reserve"
                       ? "bg-[#1447E6] text-white"
@@ -661,7 +666,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
 
                 <button
                   type="button"
-                  onClick={() => setActiveTab("billing")}
+                  onClick={() => selectTab("billing")}
                   className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
                     activeTab === "billing"
                       ? "bg-[#1447E6] text-white"
@@ -753,50 +758,34 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
               </button>
             </div>
 
-            {/* Clean 3-Card Summary Row */}
-            <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="rounded-xl bg-[#F4F4F5] p-4 sm:p-5">
-                <p className="text-base font-bold text-[#52525B]">Last Checked</p>
-                <p className="mt-1 text-lg font-bold text-[#0A0A0A]">
-                  {formatManilaTime(lastRun?.finished_at ?? lastRun?.started_at ?? fetchedAt)}
-                </p>
-              </div>
+            {/* Clean 3-Card Summary Row (shown on Check Open Slots) */}
+            {activeTab === "slots" && (
+              <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="rounded-xl bg-[#F4F4F5] p-4 sm:p-5">
+                  <p className="text-base font-bold text-[#52525B]">Last Checked</p>
+                  <p className="mt-1 text-lg font-bold text-[#0A0A0A]">
+                    {formatManilaTime(lastRun?.finished_at ?? lastRun?.started_at ?? fetchedAt)}
+                  </p>
+                </div>
 
-              <div className="rounded-xl bg-[#EFF6FF] p-4 sm:p-5">
-                <p className="text-base font-bold text-[#1E3A8A]">Open Slots Now</p>
-                <p className="mt-1 text-lg font-bold text-[#102E7A]">
-                  {openSlotsCount} of {activeSlots.length}{" "}
-                  {viewScope === "region" ? "regional" : "provincial"}
-                </p>
-              </div>
+                <div className="rounded-xl bg-[#EFF6FF] p-4 sm:p-5">
+                  <p className="text-base font-bold text-[#1E3A8A]">Open Slots Now</p>
+                  <p className="mt-1 text-lg font-bold text-[#102E7A]">
+                    {openSlotsCount} of {activeSlots.length}{" "}
+                    {viewScope === "region" ? "regional" : "provincial"}
+                  </p>
+                </div>
 
-              <div className="rounded-xl bg-[#F4F4F5] p-4 sm:p-5">
-                <p className="text-base font-bold text-[#52525B]">Active Automation</p>
-                <p className="mt-1 text-lg font-bold text-[#0A0A0A]">
-                  {watchRules.length} Alert{watchRules.length === 1 ? "" : "s"} •{" "}
-                  {armedProfilesCount} Armed
-                </p>
+                <div className="rounded-xl bg-[#F4F4F5] p-4 sm:p-5">
+                  <p className="text-base font-bold text-[#52525B]">Active Automation</p>
+                  <p className="mt-1 text-lg font-bold text-[#0A0A0A]">
+                    {watchRules.length} Alert{watchRules.length === 1 ? "" : "s"} •{" "}
+                    {armedProfilesCount} Armed
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
           </header>
-
-          {user && !entitlements.isDisabled && (
-            <FranchisePickerCard
-              franchiseTypes={franchiseTypes}
-              savedCodes={monitoredFranchiseCodes}
-              maxAllowed={entitlements.maxAlertSlots}
-              onSaved={async (codes) => {
-                setMonitoredFranchiseCodes(codes);
-                if (codes.length > 0 && !codes.includes(ruleFranchiseCode)) {
-                  setRuleFranchiseCode(codes[0]);
-                }
-                setSelectedFranchiseCode("ALL");
-                await loadData();
-              }}
-              onBanner={setBanner}
-              onGoToBilling={() => setActiveTab("billing")}
-            />
-          )}
 
           {entitlements.isDisabled && (
             <div className="rounded-2xl bg-[#FEE2E2] p-7 text-[#7F1D1D]">
@@ -826,6 +815,24 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
         {/* TAB 1: LIVE SLOTS */}
         {activeTab === "slots" && (
           <section aria-labelledby="slots-heading" className="space-y-8">
+            {user && !entitlements.isDisabled && entitlements.isActivePlan && (
+              <FranchisePickerCard
+                franchiseTypes={franchiseTypes}
+                savedCodes={monitoredFranchiseCodes}
+                maxAllowed={entitlements.maxAlertSlots}
+                onSaved={async (codes) => {
+                  setMonitoredFranchiseCodes(codes);
+                  if (codes.length > 0 && !codes.includes(ruleFranchiseCode)) {
+                    setRuleFranchiseCode(codes[0]);
+                  }
+                  setSelectedFranchiseCode("ALL");
+                  await loadData();
+                }}
+                onBanner={setBanner}
+                onGoToBilling={() => selectTab("billing")}
+              />
+            )}
+
             <div className="rounded-2xl bg-white p-6 sm:p-8">
               <h2 id="slots-heading" className="text-2xl font-bold text-[#17191C]">
                 Filter Available Slots
@@ -1094,7 +1101,9 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                         className="mt-2 min-h-12 w-full rounded-xl bg-[#EEF1F4] px-4 py-3 text-lg text-[#17191C] focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-700/30"
                       >
                         {visibleFranchiseTypes.length === 0 ? (
-                          <option value="">Pick 1 or 2 franchises above first</option>
+                          <option value="">
+                            Select your franchise in 1. Check Open Slots first
+                          </option>
                         ) : (
                           visibleFranchiseTypes.map((ft) => (
                             <option key={ft.code} value={ft.code}>
@@ -1103,6 +1112,15 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                           ))
                         )}
                       </select>
+                      {visibleFranchiseTypes.length === 0 && (
+                        <button
+                          type="button"
+                          onClick={() => selectTab("slots")}
+                          className="mt-2 min-h-12 rounded-xl bg-[#EEF1F4] px-4 py-2 text-base font-bold text-[#1447E6] hover:bg-[#E2E6EB]"
+                        >
+                          Go to 1. Check Open Slots to Pick Franchise
+                        </button>
+                      )}
                     </div>
                   </div>
 
