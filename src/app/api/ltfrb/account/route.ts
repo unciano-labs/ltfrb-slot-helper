@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { authenticateLtfrbAccount } from "@/lib/ltfrb/client";
+import { assertUserCanManageAutomation } from "@/lib/monitor/entitlements";
 import { encryptSecret } from "@/lib/security/crypto";
 import { getAuthenticatedUser } from "@/lib/supabase/auth-server";
 import { getTenantContext } from "@/lib/supabase/server";
@@ -52,6 +53,11 @@ export async function POST(request: NextRequest) {
       { error: "Supabase is not configured yet." },
       { status: 400 }
     );
+  }
+
+  const gate = await assertUserCanManageAutomation(user.id, user.email);
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;

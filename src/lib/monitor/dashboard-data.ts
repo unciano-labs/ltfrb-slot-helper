@@ -10,6 +10,13 @@ import type {
   SubmissionLogRow,
   WatchRule,
 } from "@/lib/ltfrb/types";
+import { loadUserBillingState } from "@/lib/monitor/entitlements";
+import {
+  resolveUserEntitlements,
+  type PaymentQrCodeRow,
+  type PaymentRequestRow,
+  type UserEntitlements,
+} from "@/lib/monitor/monetization";
 import { getAuthenticatedUser } from "@/lib/supabase/auth-server";
 import { getTenantContext } from "@/lib/supabase/server";
 
@@ -53,6 +60,10 @@ export interface DashboardPayload {
   user: { id: string; email: string | null } | null;
   savedAccount: SavedAccountSummary | null;
   monitoredFranchiseCodes: string[];
+  entitlements: UserEntitlements;
+  qrCodes: PaymentQrCodeRow[];
+  paymentRequests: PaymentRequestRow[];
+  billingSchemaReady: boolean;
   franchiseTypes: FranchiseType[];
   regionSlots: SlotEntry[];
   provinceSlots: SlotEntry[];
@@ -125,6 +136,12 @@ export async function loadDashboardData(options?: {
   let fetchedAt = new Date().toISOString();
   let servedFromCache = false;
   let isStale = true;
+  let billingResult: {
+    entitlements: UserEntitlements;
+    qrCodes: PaymentQrCodeRow[];
+    paymentRequests: PaymentRequestRow[];
+    schemaReady: boolean;
+  } | null = null;
 
   if (supabaseReady) {
     const { supabase, websiteId } = getTenantContext();
@@ -161,8 +178,8 @@ export async function loadDashboardData(options?: {
       isStale = Number.isNaN(ageMs) || ageMs >= SNAPSHOT_CACHE_MAX_AGE_MS;
     }
 
-    // Phase 2: load cached snapshot rows AND all 6 user-scoped tables in a single parallel batch
-    const [cachedRowsRes, userQueries] = await Promise.all([
+    // Phase 2: load cached snapshot rows AND all user-scoped tables + billing in parallel
+    const [cachedRowsRes, userQueries, billingState] = await Promise.all([
       latestCheckedAt
         ? supabase
             .from("ltfrb_slot_snapshots")
@@ -214,7 +231,10 @@ export async function loadDashboardData(options?: {
               .maybeSingle(),
           ])
         : Promise.resolve(null),
+      user ? loadUserBillingState(user.id, user.email) : Promise.resolve(null),
     ]);
+
+    billingResult = billingState;
 
     const cachedRows = (cachedRowsRes.data as Array<Record<string, unknown>> | null) ?? [];
     if (latestCheckedAt && cachedRows.length > 0) {
@@ -267,6 +287,14 @@ export async function loadDashboardData(options?: {
     }
   }
 
+  const defaultEntitlements: UserEntitlements = resolveUserEntitlements({
+    subscription: null,
+    userEmail: user?.email ?? null,
+    usedProfiles: reservationProfiles.length,
+    usedAlerts: watchRules.length,
+    monitoredCodesCount: monitoredFranchiseCodes.length,
+  });
+
   if (franchiseTypes.length === 0 && (regionSlots.length > 0 || provinceSlots.length > 0)) {
     franchiseTypes = deriveFranchiseTypesFromSlots([...regionSlots, ...provinceSlots]);
   }
@@ -279,6 +307,10 @@ export async function loadDashboardData(options?: {
     user,
     savedAccount,
     monitoredFranchiseCodes,
+    entitlements: billingResult?.entitlements ?? defaultEntitlements,
+    qrCodes: billingResult?.qrCodes ?? [],
+    paymentRequests: billingResult?.paymentRequests ?? [],
+    billingSchemaReady: billingResult?.schemaReady ?? false,
     franchiseTypes,
     regionSlots,
     provinceSlots,

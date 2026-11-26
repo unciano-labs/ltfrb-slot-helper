@@ -112,6 +112,12 @@ export default function LandingPage() {
               How It Works
             </a>
             <a
+              href="#pricing"
+              className="inline-flex min-h-12 items-center rounded-xl px-4 py-2 text-base font-bold text-[#18181B] hover:bg-[#F4F4F5] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+            >
+              Pricing
+            </a>
+            <a
               href="#faq"
               className="inline-flex min-h-12 items-center rounded-xl px-4 py-2 text-base font-bold text-[#18181B] hover:bg-[#F4F4F5] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
             >
@@ -273,8 +279,8 @@ export default function LandingPage() {
                 </h3>
                 <ul className="mt-4 space-y-3 text-lg leading-relaxed text-[#1E3A8A]">
                   <li>
-                    • <strong>Auto-Check Every 15 Minutes:</strong> Watches up to 2 chosen
-                    franchises for your account and emails you when slots open or increase.
+                    • <strong>Auto-Check Every 15 Minutes:</strong> Watches your chosen franchises
+                    and emails you immediately when slots open or increase.
                   </li>
                   <li>
                     • <strong>Auto-Submission:</strong> Submits your saved vehicle details &amp;
@@ -310,11 +316,11 @@ export default function LandingPage() {
                 15-Min Auto Check
               </span>
               <h3 className="mt-4 text-2xl font-bold text-[#0A0A0A]">
-                Pick Up to 2 Franchises
+                Pick Your Monitored Franchises
               </h3>
               <p className="mt-2 text-lg leading-relaxed text-[#52525B]">
-                Choose the exact 1 or 2 franchise types you care about (such as TNVS or E-TNVS).
-                Your account only monitors and emails you about those choices.
+                Choose the franchise types you care about (such as TNVS or E-TNVS). Start with 1
+                alert slot included and add extra slots (+₱100 each) anytime.
               </p>
             </div>
           </ScrollReveal>
@@ -383,11 +389,11 @@ export default function LandingPage() {
                   1
                 </span>
                 <h3 className="mt-5 text-2xl font-bold text-[#0A0A0A]">
-                  Sign In &amp; Pick Franchises
+                  Sign In &amp; Activate Plan
                 </h3>
                 <p className="mt-3 text-lg leading-relaxed text-[#52525B]">
-                  Create your private account, pick up to 2 franchise types, and set your Gmail
-                  alert rules.
+                  Create your account, activate the ₱1,699 1-Year Plan via GCash or Maya QR, and
+                  set your Gmail alert rules.
                 </p>
               </div>
             </ScrollReveal>
@@ -422,6 +428,90 @@ export default function LandingPage() {
               </div>
             </ScrollReveal>
           </div>
+        </div>
+      </section>
+
+      {/* Simple Annual Pricing Section */}
+      <section id="pricing" className="mx-auto max-w-5xl px-5 pt-16 sm:px-8">
+        <ScrollReveal>
+          <span className="inline-block rounded-xl bg-[#DBEAFE] px-4 py-2 text-base font-bold text-[#1E3A8A]">
+            Transparent Annual Pricing • GCash &amp; Maya Accepted
+          </span>
+          <h2 className="mt-4 text-3xl font-bold text-[#0A0A0A] sm:text-4xl">
+            One Simple Yearly Plan, Expandable Anytime
+          </h2>
+          <p className="mt-3 max-w-3xl text-lg leading-relaxed text-[#52525B]">
+            No recurring monthly credit card charges. Pay once via GCash or Maya QR and get 365
+            days of monitoring and automated filing.
+          </p>
+        </ScrollReveal>
+
+        <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <ScrollReveal delayMs={60}>
+            <div className="flex h-full flex-col justify-between rounded-2xl bg-[#102E7A] p-8 text-white">
+              <div>
+                <span className="inline-block rounded-xl bg-[#1447E6] px-4 py-1.5 text-base font-bold text-white">
+                  All Features Included
+                </span>
+                <h3 className="mt-5 text-3xl font-bold">1-Year All-Features Plan</h3>
+                <p className="mt-3 text-4xl font-bold text-white">
+                  ₱1,699 <span className="text-xl font-normal text-[#DBEAFE]">/ year</span>
+                </p>
+                <ul className="mt-6 space-y-3 text-lg leading-relaxed text-[#EFF6FF]">
+                  <li>• Automatic LTFRB slot checking every 15 minutes</li>
+                  <li>• Instant Gmail notifications when slots open or increase</li>
+                  <li>• 1 Auto-Reserve vehicle profile included</li>
+                  <li>• 1 Monitored Alert slot included</li>
+                  <li>• Encrypted ltfrb-foa.ph portal login &amp; auto-token refresh</li>
+                </ul>
+              </div>
+
+              <div className="mt-8">
+                <Link
+                  href={summary.userEmail ? "/dashboard" : "/login"}
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-white px-6 py-4 text-lg font-bold text-[#102E7A] hover:bg-[#EFF6FF] focus:outline-none focus:ring-4 focus:ring-white/40"
+                >
+                  {summary.userEmail ? "Activate in Plan & Billing" : "Get Started for ₱1,699 / Year"}
+                </Link>
+              </div>
+            </div>
+          </ScrollReveal>
+
+          <ScrollReveal delayMs={140}>
+            <div className="flex h-full flex-col justify-between rounded-2xl bg-white p-8">
+              <div className="space-y-6">
+                <span className="inline-block rounded-xl bg-[#DCFCE7] px-4 py-1.5 text-base font-bold text-[#14532D]">
+                  Need More Units or Franchises?
+                </span>
+                <h3 className="text-3xl font-bold text-[#0A0A0A]">Flexible Add-Ons</h3>
+
+                <div className="rounded-xl bg-[#F4F4F5] p-5">
+                  <p className="text-xl font-bold text-[#0A0A0A]">
+                    Extra Auto-Reserve Profile — +₱100 each
+                  </p>
+                  <p className="mt-1 text-lg text-[#52525B]">
+                    Have 2 or more vehicles to submit? Add +1 Auto-Reserve profile slot per extra
+                    unit.
+                  </p>
+                </div>
+
+                <div className="rounded-xl bg-[#F4F4F5] p-5">
+                  <p className="text-xl font-bold text-[#0A0A0A]">
+                    Extra Alert Slot — +₱100 each
+                  </p>
+                  <p className="mt-1 text-lg text-[#52525B]">
+                    Want to watch multiple franchise types or regions separately? Add extra alert
+                    slots anytime.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-8 rounded-xl bg-[#EFF6FF] p-5 text-lg font-bold text-[#1E3A8A]">
+                Pay easily inside your dashboard by scanning our official GCash or Maya QR code and
+                uploading your receipt screenshot.
+              </div>
+            </div>
+          </ScrollReveal>
         </div>
       </section>
 

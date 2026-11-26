@@ -7,16 +7,21 @@ import { MAX_MONITORED_FRANCHISES } from "@/lib/monitor/preferences";
 interface FranchisePickerCardProps {
   franchiseTypes: FranchiseType[];
   savedCodes: string[];
+  maxAllowed?: number;
   onSaved: (codes: string[]) => Promise<void>;
   onBanner: (banner: { kind: "success" | "error" | "info"; text: string }) => void;
+  onGoToBilling?: () => void;
 }
 
 export default function FranchisePickerCard({
   franchiseTypes,
   savedCodes,
+  maxAllowed = MAX_MONITORED_FRANCHISES,
   onSaved,
   onBanner,
+  onGoToBilling,
 }: FranchisePickerCardProps) {
+  const effectiveMax = Math.max(1, maxAllowed);
   const [draftCodes, setDraftCodes] = useState<string[]>(savedCodes);
   const [isEditing, setIsEditing] = useState(savedCodes.length === 0);
   const [saving, setSaving] = useState(false);
@@ -37,7 +42,7 @@ export default function FranchisePickerCard({
       if (prev.includes(code)) {
         return prev.filter((c) => c !== code);
       }
-      if (prev.length >= MAX_MONITORED_FRANCHISES) {
+      if (prev.length >= effectiveMax) {
         return prev;
       }
       return [...prev, code];
@@ -93,7 +98,7 @@ export default function FranchisePickerCard({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-base font-bold text-[#4B5563]">
-              Monitored Franchises for Your Account (Up to {MAX_MONITORED_FRANCHISES})
+              Monitored Franchises for Your Account (Up to {effectiveMax})
             </p>
             <p className="mt-1 text-xl font-bold text-[#17191C]">
               {savedNames.join(" • ")}
@@ -112,7 +117,7 @@ export default function FranchisePickerCard({
     );
   }
 
-  const reachedMax = draftCodes.length >= MAX_MONITORED_FRANCHISES;
+  const reachedMax = draftCodes.length >= effectiveMax;
 
   return (
     <section
@@ -122,23 +127,35 @@ export default function FranchisePickerCard({
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 id="franchise-picker-heading" className="text-2xl font-bold text-[#17191C]">
-            Choose Up to {MAX_MONITORED_FRANCHISES} Franchises to Monitor
+            Choose Up to {effectiveMax} Franchise{effectiveMax === 1 ? "" : "s"} to Monitor
           </h2>
           <p className="mt-1 text-lg leading-relaxed text-[#374151]">
-            Tap 1 or 2 franchise types below. Only the franchises you pick will be checked,
-            emailed, and reserved for your account.
+            Tap {effectiveMax === 1 ? "1 franchise type" : `up to ${effectiveMax} franchise types`}{" "}
+            below. Only the franchises you pick will be checked, emailed, and reserved for your
+            account.
           </p>
         </div>
         <span className="inline-block shrink-0 rounded-xl bg-[#DBEAFE] px-4 py-2 text-lg font-bold text-[#1E3A8A]">
-          {draftCodes.length} of {MAX_MONITORED_FRANCHISES} picked
+          {draftCodes.length} of {effectiveMax} picked
         </span>
       </div>
 
       {reachedMax && (
-        <p className="mt-4 rounded-xl bg-[#EEF1F4] px-4 py-3 text-base font-bold text-[#374151]">
-          You picked {MAX_MONITORED_FRANCHISES} franchises (the maximum). Tap a green item below to
-          uncheck it if you want to pick a different one.
-        </p>
+        <div className="mt-4 flex flex-col gap-3 rounded-xl bg-[#EEF1F4] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-base font-bold text-[#374151]">
+            You picked {effectiveMax} franchise{effectiveMax === 1 ? "" : "s"} (your plan limit).
+            Tap a green item below to uncheck it first if you want a different one.
+          </p>
+          {onGoToBilling && (
+            <button
+              type="button"
+              onClick={onGoToBilling}
+              className="min-h-12 shrink-0 rounded-xl bg-white px-4 py-2 text-base font-bold text-[#1447E6] hover:bg-[#E4E4E7]"
+            >
+              Add Alert Slot (+₱100)
+            </button>
+          )}
+        </div>
       )}
 
       <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/env";
+import { assertUserCanManageAutomation } from "@/lib/monitor/entitlements";
 import { isFranchiseAllowedForAccount } from "@/lib/monitor/preferences";
 import { getAuthenticatedUser } from "@/lib/supabase/auth-server";
 import { getTenantContext } from "@/lib/supabase/server";
@@ -41,6 +42,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "Supabase is not configured yet." },
       { status: 400 }
+    );
+  }
+
+  const gate = await assertUserCanManageAutomation(user.id, user.email);
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error }, { status: gate.status });
+  }
+
+  if (gate.entitlements.usedAlerts >= gate.entitlements.maxAlertSlots) {
+    return NextResponse.json(
+      {
+        error: `You have reached your limit of ${gate.entitlements.maxAlertSlots} alert slot(s). Add an extra alert slot (+₱100) under Plan & Billing to monitor more slots.`,
+      },
+      { status: 403 }
     );
   }
 
@@ -87,7 +102,7 @@ export async function POST(request: NextRequest) {
   const monitoredCodes =
     (prefRow?.monitored_franchise_codes as string[] | undefined) ?? [];
 
-  if (!isFranchiseAllowedForAccount(franchiseTypeCode, monitoredCodes)) {
+  if (!isFranchiseAllowedForAccount(franchiseTypeCode, monitoredCodes, gate.entitlements.maxAlertSlots)) {
     return NextResponse.json(
       {
         error:
@@ -142,6 +157,11 @@ export async function PATCH(request: NextRequest) {
       { error: "Supabase is not configured yet." },
       { status: 400 }
     );
+  }
+
+  const gate = await assertUserCanManageAutomation(user.id, user.email);
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;

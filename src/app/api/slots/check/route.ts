@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/env";
+import { assertUserCanManageAutomation } from "@/lib/monitor/entitlements";
 import { runSlotMonitorSync } from "@/lib/monitor/sync-slots";
 import { getAuthenticatedUser } from "@/lib/supabase/auth-server";
 import { getTenantContext } from "@/lib/supabase/server";
@@ -25,6 +26,11 @@ export async function POST() {
       },
       { status: 400 }
     );
+  }
+
+  const gate = await assertUserCanManageAutomation(user.id, user.email);
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error }, { status: gate.status });
   }
 
   try {

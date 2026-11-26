@@ -308,3 +308,131 @@ export async function sendReservationConfirmationEmail(params: {
     attemptedAtIso: params.submittedAtIso,
   });
 }
+
+function getAppBaseUrl(): string {
+  const raw =
+    getOptionalEnv("NEXT_PUBLIC_APP_URL") ??
+    getOptionalEnv("APP_URL") ??
+    "https://ltfrb-slot-helper.vercel.app";
+  return raw.replace(/\/$/, "");
+}
+
+export async function sendPaymentRequestAdminEmail(params: {
+  adminEmail: string;
+  payerEmail: string;
+  amountPhp: number;
+  requestTypeLabel: string;
+  referenceNumber: string;
+  senderName: string | null;
+  submittedAtIso: string;
+}): Promise<SlotAlertEmailResult> {
+  const gmailUser = getOptionalEnv("GMAIL_USER");
+  const fromName = getOptionalEnv("GMAIL_FROM_NAME") ?? "LTFRB Slot Helper";
+  const transporter = createGmailTransporter();
+  if (!transporter || !gmailUser) {
+    return { sent: false, error: "Gmail SMTP credentials not configured." };
+  }
+
+  const subject = `New QR Payment Proof (₱${params.amountPhp.toLocaleString()}) — ${params.payerEmail}`;
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:24px;background:#F4F4F5;color:#0A0A0A;">
+      <div style="background:#FFFFFF;border-radius:12px;padding:24px;">
+        <h1 style="margin:0 0 12px 0;font-size:22px;color:#102E7A;">New QR Payment Pending Approval</h1>
+        <p style="margin:0 0 14px 0;font-size:17px;">
+          <strong>User:</strong> ${escapeHtml(params.payerEmail)}<br/>
+          <strong>Plan / Add-on:</strong> ${escapeHtml(params.requestTypeLabel)}<br/>
+          <strong>Expected Amount:</strong> ₱${params.amountPhp.toLocaleString()}<br/>
+          <strong>Reference No:</strong> ${escapeHtml(params.referenceNumber)}<br/>
+          ${params.senderName ? `<strong>Sender Name:</strong> ${escapeHtml(params.senderName)}<br/>` : ""}
+          <strong>Submitted:</strong> ${escapeHtml(
+            new Date(params.submittedAtIso).toLocaleString("en-PH", {
+              timeZone: "Asia/Manila",
+              dateStyle: "medium",
+              timeStyle: "short",
+            })
+          )}
+        </p>
+        <a href="${escapeHtml(`${getAppBaseUrl()}/superadmin`)}"
+           style="display:inline-block;background:#1447E6;color:#FFFFFF;text-decoration:none;font-size:17px;font-weight:700;padding:12px 22px;border-radius:8px;">
+          Review in SuperAdmin
+        </a>
+      </div>
+    </div>
+  `;
+
+  try {
+    const info = await transporter.sendMail({
+      from: `"${fromName.replace(/"/g, "")}" <${gmailUser}>`,
+      to: params.adminEmail,
+      subject,
+      html,
+    });
+    return { sent: true, providerId: info.messageId };
+  } catch (err) {
+    return { sent: false, error: err instanceof Error ? err.message : "Gmail SMTP error" };
+  }
+}
+
+export async function sendPaymentDecisionUserEmail(params: {
+  to: string;
+  approved: boolean;
+  amountPhp: number;
+  requestTypeLabel: string;
+  expiresAtIso?: string | null;
+  rejectionReason?: string | null;
+}): Promise<SlotAlertEmailResult> {
+  const gmailUser = getOptionalEnv("GMAIL_USER");
+  const fromName = getOptionalEnv("GMAIL_FROM_NAME") ?? "LTFRB Slot Helper";
+  const transporter = createGmailTransporter();
+  if (!transporter || !gmailUser) {
+    return { sent: false, error: "Gmail SMTP credentials not configured." };
+  }
+
+  const subject = params.approved
+    ? `Payment Approved — Your LTFRB Slot Helper Plan Is Active`
+    : `Payment Could Not Be Verified — Action Needed`;
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;padding:24px;background:#F4F4F5;color:#0A0A0A;">
+      <div style="background:#FFFFFF;border-radius:12px;padding:24px;">
+        <h1 style="margin:0 0 12px 0;font-size:22px;color:${params.approved ? "#14532D" : "#7F1D1D"};">
+          ${params.approved ? "Your Plan & Quotas Are Now Active" : "Payment Verification Update"}
+        </h1>
+        <p style="margin:0 0 16px 0;font-size:17px;line-height:1.5;">
+          <strong>Item:</strong> ${escapeHtml(params.requestTypeLabel)} (₱${params.amountPhp.toLocaleString()})<br/>
+          ${
+            params.approved && params.expiresAtIso
+              ? `<strong>Active Until:</strong> ${escapeHtml(
+                  new Date(params.expiresAtIso).toLocaleDateString("en-PH", {
+                    timeZone: "Asia/Manila",
+                    dateStyle: "long",
+                  })
+                )}<br/>`
+              : ""
+          }
+          ${
+            !params.approved && params.rejectionReason
+              ? `<strong>Note from Admin:</strong> ${escapeHtml(params.rejectionReason)}<br/>`
+              : ""
+          }
+        </p>
+        <a href="${escapeHtml(`${getAppBaseUrl()}/dashboard`)}"
+           style="display:inline-block;background:#1447E6;color:#FFFFFF;text-decoration:none;font-size:17px;font-weight:700;padding:12px 22px;border-radius:8px;">
+          Open Your Dashboard
+        </a>
+      </div>
+    </div>
+  `;
+
+  try {
+    const info = await transporter.sendMail({
+      from: `"${fromName.replace(/"/g, "")}" <${gmailUser}>`,
+      to: params.to,
+      subject,
+      html,
+    });
+    return { sent: true, providerId: info.messageId };
+  } catch (err) {
+    return { sent: false, error: err instanceof Error ? err.message : "Gmail SMTP error" };
+  }
+}

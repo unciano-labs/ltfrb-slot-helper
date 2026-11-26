@@ -6,6 +6,10 @@ import type {
   SlotEntry,
   WatchRule,
 } from "@/lib/ltfrb/types";
+import {
+  resolveUserEntitlements,
+  type SubscriptionRow,
+} from "@/lib/monitor/monetization";
 import { isFranchiseAllowedForAccount } from "@/lib/monitor/preferences";
 import {
   evaluateAlertDecision,
@@ -123,6 +127,42 @@ export async function runSlotMonitorSync(
       );
     }
 
+    // Load subscription status for active / non-disabled gating in cron
+    let subQuery = supabase
+      .from("ltfrb_subscriptions")
+      .select("*")
+      .eq("website_id", websiteId);
+
+    if (onlyUserId) {
+      subQuery = subQuery.eq("user_id", onlyUserId);
+    }
+
+    const { data: subRows, error: subError } = await subQuery;
+    const subscriptionSchemaReady =
+      !subError || (subError.code !== "42P01" && subError.code !== "PGRST205");
+    const subByUser = new Map<string, SubscriptionRow>();
+    for (const row of (subRows as SubscriptionRow[] | null) ?? []) {
+      subByUser.set(row.user_id, row);
+    }
+
+    const isUserEntitled = (userId: string): { allowed: boolean; maxAlertSlots: number } => {
+      if (!subscriptionSchemaReady) {
+        return { allowed: true, maxAlertSlots: 2 };
+      }
+      const sub = subByUser.get(userId) ?? null;
+      const ent = resolveUserEntitlements({
+        subscription: sub,
+        userEmail: sub?.user_email ?? null,
+        usedProfiles: 0,
+        usedAlerts: 0,
+        monitoredCodesCount: 0,
+      });
+      return {
+        allowed: ent.isActivePlan && !ent.isDisabled,
+        maxAlertSlots: ent.maxAlertSlots,
+      };
+    };
+
     // Load active watch rules for this website_id (optionally scoped to one user on manual check)
     let rulesQuery = supabase
       .from("ltfrb_watch_rules")
@@ -139,12 +179,15 @@ export async function runSlotMonitorSync(
       throw new Error(`Failed to load watch rules: ${rulesError.message}`);
     }
 
-    const rules = ((rulesData ?? []) as WatchRule[]).filter((rule) =>
-      isFranchiseAllowedForAccount(
+    const rules = ((rulesData ?? []) as WatchRule[]).filter((rule) => {
+      const access = isUserEntitled(rule.user_id);
+      if (!access.allowed) return false;
+      return isFranchiseAllowedForAccount(
         rule.franchise_type_code,
-        userMonitoredMap.get(rule.user_id) ?? []
-      )
-    );
+        userMonitoredMap.get(rule.user_id) ?? [],
+        access.maxAlertSlots
+      );
+    });
     const openMatches: SyncRunSummary["openMatches"] = [];
     let alertsSent = 0;
 
@@ -261,10 +304,15 @@ export async function runSlotMonitorSync(
     const reservationsAttempted: ReservationAttemptSummary[] = [];
 
     for (const profile of (armedProfiles ?? []) as ApplicationProfile[]) {
+      const access = isUserEntitled(profile.user_id);
+      if (!access.allowed) {
+        continue;
+      }
       if (
         !isFranchiseAllowedForAccount(
           profile.franchise_type_code,
-          userMonitoredMap.get(profile.user_id) ?? []
+          userMonitoredMap.get(profile.user_id) ?? [],
+          access.maxAlertSlots
         )
       ) {
         continue;

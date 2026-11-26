@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { hasValidOwnershipDocument } from "@/lib/ltfrb/client";
 import type { VehicleUnitInput } from "@/lib/ltfrb/types";
+import { assertUserCanManageAutomation } from "@/lib/monitor/entitlements";
 import { isFranchiseAllowedForAccount } from "@/lib/monitor/preferences";
 import { getAuthenticatedUser } from "@/lib/supabase/auth-server";
 import { getTenantContext } from "@/lib/supabase/server";
@@ -53,6 +54,20 @@ export async function POST(request: NextRequest) {
 
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: "Supabase is not configured yet." }, { status: 400 });
+  }
+
+  const gate = await assertUserCanManageAutomation(user.id, user.email);
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error }, { status: gate.status });
+  }
+
+  if (gate.entitlements.usedProfiles >= gate.entitlements.maxAutoReserveProfiles) {
+    return NextResponse.json(
+      {
+        error: `You have reached your limit of ${gate.entitlements.maxAutoReserveProfiles} Auto-Reserve profile(s). Purchase an additional profile (+₱100 each) under Plan & Billing to add more.`,
+      },
+      { status: 403 }
+    );
   }
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
@@ -135,7 +150,7 @@ export async function POST(request: NextRequest) {
   const monitoredCodes =
     (prefRow?.monitored_franchise_codes as string[] | undefined) ?? [];
 
-  if (!isFranchiseAllowedForAccount(franchiseTypeCode, monitoredCodes)) {
+  if (!isFranchiseAllowedForAccount(franchiseTypeCode, monitoredCodes, gate.entitlements.maxAlertSlots)) {
     return NextResponse.json(
       {
         error:
@@ -198,6 +213,11 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   }
 
+  const patchGate = await assertUserCanManageAutomation(user.id, user.email);
+  if (!patchGate.ok) {
+    return NextResponse.json({ error: patchGate.error }, { status: patchGate.status });
+  }
+
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const id = body?.id ? String(body.id) : "";
   if (!id) {
@@ -242,7 +262,7 @@ export async function PATCH(request: NextRequest) {
       .maybeSingle();
     const monitoredCodes =
       (prefRow?.monitored_franchise_codes as string[] | undefined) ?? [];
-    if (!isFranchiseAllowedForAccount(nextCode, monitoredCodes)) {
+    if (!isFranchiseAllowedForAccount(nextCode, monitoredCodes, patchGate.entitlements.maxAlertSlots)) {
       return NextResponse.json(
         {
           error: `You can only monitor your selected franchises (${monitoredCodes.join(", ")}).`,
@@ -360,6 +380,11 @@ export async function DELETE(request: NextRequest) {
   const user = await getAuthenticatedUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+  }
+
+  const patchGate = await assertUserCanManageAutomation(user.id, user.email);
+  if (!patchGate.ok) {
+    return NextResponse.json({ error: patchGate.error }, { status: patchGate.status });
   }
 
   const id = request.nextUrl.searchParams.get("id")?.trim();

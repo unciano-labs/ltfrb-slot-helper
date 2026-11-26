@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AutoReserveTab from "@/components/AutoReserveTab";
+import BillingTab from "@/components/BillingTab";
 import FranchisePickerCard from "@/components/FranchisePickerCard";
 import SignInRequiredCard from "@/components/SignInRequiredCard";
+import SuperAdminPasswordModal from "@/components/SuperAdminPasswordModal";
 import type {
   ApplicationProfile,
   FranchiseType,
@@ -21,8 +23,15 @@ import type {
   SavedAccountSummary,
   SlotLoadMode,
 } from "@/lib/monitor/dashboard-data";
+import {
+  isSuperAdminEmail,
+  resolveUserEntitlements,
+  type PaymentQrCodeRow,
+  type PaymentRequestRow,
+  type UserEntitlements,
+} from "@/lib/monitor/monetization";
 
-type ActiveTab = "slots" | "alerts" | "account" | "reserve";
+type ActiveTab = "slots" | "alerts" | "account" | "reserve" | "billing";
 
 interface SessionUser {
   id: string;
@@ -88,6 +97,24 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
   const [savedAccount, setSavedAccount] = useState<SavedAccountRow | null>(
     initialData?.savedAccount ?? null
   );
+  const [entitlements, setEntitlements] = useState<UserEntitlements>(
+    initialData?.entitlements ??
+      resolveUserEntitlements({
+        subscription: null,
+        userEmail: initialData?.user?.email ?? null,
+        usedProfiles: initialData?.reservationProfiles?.length ?? 0,
+        usedAlerts: initialData?.watchRules?.length ?? 0,
+        monitoredCodesCount: initialData?.monitoredFranchiseCodes?.length ?? 0,
+      })
+  );
+  const [qrCodes, setQrCodes] = useState<PaymentQrCodeRow[]>(initialData?.qrCodes ?? []);
+  const [paymentRequests, setPaymentRequests] = useState<PaymentRequestRow[]>(
+    initialData?.paymentRequests ?? []
+  );
+  const [billingSchemaReady, setBillingSchemaReady] = useState<boolean>(
+    initialData?.billingSchemaReady ?? false
+  );
+  const [showSuperAdminPrompt, setShowSuperAdminPrompt] = useState(false);
 
   // Slot Explorer filters
   const [viewScope, setViewScope] = useState<SlotScope>("region");
@@ -137,6 +164,12 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
     setReservationProfiles(slotsJson.reservationProfiles ?? []);
     setSubmissionLogs(slotsJson.submissionLogs ?? []);
     setSavedAccount(slotsJson.savedAccount ?? null);
+    if (slotsJson.entitlements) {
+      setEntitlements(slotsJson.entitlements);
+    }
+    setQrCodes(slotsJson.qrCodes ?? []);
+    setPaymentRequests(slotsJson.paymentRequests ?? []);
+    setBillingSchemaReady(Boolean(slotsJson.billingSchemaReady));
   }, []);
 
   const refreshLiveSlots = useCallback(async () => {
@@ -476,7 +509,40 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
       title: "Auto-Reserve Application",
       subtitle: "Prepare vehicle details and Sales Invoice PDFs for automatic slot submission.",
     },
+    billing: {
+      title: "Plan, Add-Ons & GCash / Maya QR Billing",
+      subtitle: "Manage your ₱1,699 1-Year All-Features Plan, extra Auto-Reserve profiles, and Alert slots.",
+    },
   };
+
+  const canUseSuperAdmin = isSuperAdminEmail(user?.email);
+
+  const planRequiredCard = (featureTitle: string) => (
+    <div className="rounded-2xl bg-white p-7 sm:p-9">
+      <span className="inline-block rounded-xl bg-[#FEF3C7] px-4 py-1.5 text-base font-bold text-[#78350F]">
+        1-Year Plan Required
+      </span>
+      <h2 className="mt-4 text-2xl font-bold text-[#0A0A0A] sm:text-3xl">
+        Activate Your ₱1,699 Annual Plan to Use {featureTitle}
+      </h2>
+      <p className="mt-3 max-w-2xl text-lg leading-relaxed text-[#52525B]">
+        {entitlements.status === "pending"
+          ? "Your GCash/Maya payment proof is currently waiting for SuperAdmin approval. Once approved, all automation features and notifications will unlock automatically."
+          : "Get 1 full year of automated 15-minute slot checks, Gmail alerts, 1 Auto-Reserve vehicle profile, and 1 Alert slot (+₱100 per extra profile or alert slot)."}
+      </p>
+      <div className="mt-6 flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={() => setActiveTab("billing")}
+          className="min-h-12 rounded-xl bg-[#1447E6] px-6 py-3.5 text-lg font-bold text-white hover:bg-[#1039B8] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+        >
+          {entitlements.status === "pending"
+            ? "View Payment Status in Billing"
+            : "Pay via GCash / Maya QR Now"}
+        </button>
+      </div>
+    </div>
+  );
 
   const armedProfilesCount = reservationProfiles.filter(
     (p) => p.is_armed && p.lock_status !== "submitted"
@@ -589,7 +655,36 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                         : "bg-white text-[#18181B]"
                     }`}
                   >
-                    {reservationProfiles.length}
+                    {reservationProfiles.length}/{entitlements.maxAutoReserveProfiles}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("billing")}
+                  className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+                    activeTab === "billing"
+                      ? "bg-[#1447E6] text-white"
+                      : "bg-[#F4F4F5] text-[#18181B] hover:bg-[#E4E4E7]"
+                  }`}
+                >
+                  <span>5. Plan &amp; Billing</span>
+                  <span
+                    className={`shrink-0 rounded-lg px-2.5 py-0.5 text-base font-bold ${
+                      activeTab === "billing"
+                        ? "bg-[#102E7A] text-white"
+                        : entitlements.isActivePlan
+                        ? "bg-[#DCFCE7] text-[#14532D]"
+                        : entitlements.status === "pending"
+                        ? "bg-[#DBEAFE] text-[#1E3A8A]"
+                        : "bg-[#FEE2E2] text-[#7F1D1D]"
+                    }`}
+                  >
+                    {entitlements.isActivePlan
+                      ? "Active"
+                      : entitlements.status === "pending"
+                      ? "Pending"
+                      : "₱1,699"}
                   </span>
                 </button>
               </div>
@@ -597,6 +692,16 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
 
             {/* Sidebar Secondary Utilities */}
             <div className="mt-7 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
+              {canUseSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setShowSuperAdminPrompt(true)}
+                  className="min-h-12 w-full rounded-xl bg-[#102E7A] px-4 py-3 text-lg font-bold text-white hover:bg-[#0B225C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                >
+                  SuperAdmin Panel
+                </button>
+              )}
+
               <Link
                 href="/"
                 className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[#F4F4F5] px-4 py-3 text-lg font-bold text-[#18181B] hover:bg-[#E4E4E7] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
@@ -675,10 +780,11 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
             </div>
           </header>
 
-          {user && (
+          {user && !entitlements.isDisabled && (
             <FranchisePickerCard
               franchiseTypes={franchiseTypes}
               savedCodes={monitoredFranchiseCodes}
+              maxAllowed={entitlements.maxAlertSlots}
               onSaved={async (codes) => {
                 setMonitoredFranchiseCodes(codes);
                 if (codes.length > 0 && !codes.includes(ruleFranchiseCode)) {
@@ -688,7 +794,18 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                 await loadData();
               }}
               onBanner={setBanner}
+              onGoToBilling={() => setActiveTab("billing")}
             />
+          )}
+
+          {entitlements.isDisabled && (
+            <div className="rounded-2xl bg-[#FEE2E2] p-7 text-[#7F1D1D]">
+              <h2 className="text-2xl font-bold">Your Account Has Been Disabled</h2>
+              <p className="mt-2 text-lg leading-relaxed">
+                {entitlements.disabledReason ||
+                  "Access to slot monitoring and automated submissions is currently paused for this account. Please contact webcareer1@gmail.com for assistance."}
+              </p>
+            </div>
           )}
 
           {banner && (
@@ -907,13 +1024,15 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
           </section>
         )}
 
-        {/* TAB 2: EMAIL ALERTS (Requires Sign In) */}
+        {/* TAB 2: EMAIL ALERTS (Requires Sign In + Active Plan) */}
         {activeTab === "alerts" &&
           (!user ? (
             <SignInRequiredCard
               title="Sign In to Set Email Alerts"
               description="Please sign in to your account so you can save which franchise types to watch and receive automatic email notifications every 15 minutes."
             />
+          ) : entitlements.isDisabled ? null : !entitlements.isActivePlan ? (
+            planRequiredCard("Email Alerts")
           ) : (
             <section aria-labelledby="alerts-heading" className="space-y-8">
               <form onSubmit={handleSaveRule} className="rounded-2xl bg-white p-6 sm:p-8">
@@ -1220,13 +1339,15 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
             </section>
           ))}
 
-        {/* TAB 3: LTFRB ACCOUNT (Requires Sign In) */}
+        {/* TAB 3: LTFRB ACCOUNT (Requires Sign In + Active Plan) */}
         {activeTab === "account" &&
           (!user ? (
             <SignInRequiredCard
               title="Sign In to Save Your LTFRB Account"
               description="For your privacy, please sign in first before viewing or saving your LTFRB login credentials."
             />
+          ) : entitlements.isDisabled ? null : !entitlements.isActivePlan ? (
+            planRequiredCard("LTFRB Portal Account")
           ) : (
             <section aria-labelledby="account-heading" className="space-y-8">
               <form onSubmit={handleSaveAccount} className="rounded-2xl bg-white p-6 sm:p-8">
@@ -1314,13 +1435,15 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
             </section>
           ))}
 
-        {/* TAB 4: AUTOMATIC SLOT RESERVATION (Requires Sign In) */}
+        {/* TAB 4: AUTOMATIC SLOT RESERVATION (Requires Sign In + Active Plan) */}
         {activeTab === "reserve" &&
           (!user ? (
             <SignInRequiredCard
               title="Sign In to Use Automatic Slot Reservation"
               description="Please sign in first to save your vehicle details, turn on automatic slot reservation, and view submission results."
             />
+          ) : entitlements.isDisabled ? null : !entitlements.isActivePlan ? (
+            planRequiredCard("Automatic Slot Reservation")
           ) : (
             <AutoReserveTab
               franchiseTypes={franchiseTypes}
@@ -1334,8 +1457,37 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
               onBanner={setBanner}
             />
           ))}
+
+        {/* TAB 5: PLAN & GCASH / MAYA BILLING */}
+        {activeTab === "billing" &&
+          (!user ? (
+            <SignInRequiredCard
+              title="Sign In to Manage Your Plan & Billing"
+              description="Sign in first to view your plan validity, scan our GCash or Maya QR codes, and submit payment proof."
+            />
+          ) : entitlements.isDisabled ? null : (
+            <BillingTab
+              entitlements={entitlements}
+              qrCodes={qrCodes}
+              paymentRequests={paymentRequests}
+              billingSchemaReady={billingSchemaReady}
+              onRefresh={loadData}
+              onBanner={setBanner}
+            />
+          ))}
       </main>
       </div>
+
+      {showSuperAdminPrompt && user?.email && (
+        <SuperAdminPasswordModal
+          adminEmail={user.email}
+          onCancel={() => setShowSuperAdminPrompt(false)}
+          onSuccess={() => {
+            setShowSuperAdminPrompt(false);
+            router.push("/superadmin");
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -51,4 +51,10 @@ Inspection of `https://ltfrb-foa.ph/` shows it communicates with **`https://ws.l
 
 ### Phase 5: Testing, Verification & Deployment
 - [x] **5.1 Automated Tests & UI Audit** (`npm run typecheck`, `npm test`, `npm run test:ui`, `npm run lint`, `npm run build`)
-- [ ] **5.2 Production Deployment on Vercel** (follow `DEPLOYMENT.md` to push to Vercel + configure production env vars & 15-minute trigger)
+- [x] **5.2 Production Deployment Setup** (landing page + auth-gated `/dashboard` + Vercel deployment ready)
+
+### Phase 6: Monetization, GCash/Maya QR Billing & SuperAdmin Control Center
+- [x] **6.1 Monetization Schema (`004_monetization_superadmin.sql`)** (`ltfrb_subscriptions`, `ltfrb_payment_qr_codes`, `ltfrb_payment_requests`, `ltfrb_admin_audit_logs` + dynamic alert quota constraint removal)
+- [x] **6.2 Pricing & Quota Engine** (₱1,699/year All-Features Plan with 1 Auto-Reserve + 1 Alert slot, +₱100 each extra Auto-Reserve profile or Alert slot)
+- [x] **6.3 GCash / Maya QR Payment Workflow** (in-dashboard BillingTab calculator, QR display, receipt screenshot upload to Supabase Storage, SuperAdmin email alert + user approval/rejection emails)
+- [x] **6.4 Locked SuperAdmin Console (`/superadmin`)** (strictly accessible only by `webcareer1@gmail.com` with password re-auth + signed cookie; payment queue, QR manager, user directory with disable/enable & manual quota grants, cron trigger & audit logs)

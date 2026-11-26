@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/env";
+import { assertUserCanManageAutomation } from "@/lib/monitor/entitlements";
 import { normalizeSelectedFranchises } from "@/lib/monitor/preferences";
 import { getAuthenticatedUser } from "@/lib/supabase/auth-server";
 import { getTenantContext } from "@/lib/supabase/server";
@@ -44,8 +45,16 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Supabase is not configured yet." }, { status: 400 });
   }
 
+  const gate = await assertUserCanManageAutomation(user.id, user.email);
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.error }, { status: gate.status });
+  }
+
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  const parsed = normalizeSelectedFranchises(body?.monitoredFranchiseCodes);
+  const parsed = normalizeSelectedFranchises(
+    body?.monitoredFranchiseCodes,
+    gate.entitlements.maxAlertSlots
+  );
 
   if (!parsed.valid) {
     return NextResponse.json({ error: parsed.error }, { status: 400 });
