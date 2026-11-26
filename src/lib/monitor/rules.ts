@@ -147,6 +147,27 @@ export function getManilaHourMinute(now: Date): { hour: number; minute: number }
   return { hour, minute };
 }
 
+function getMatchingSlotsForProfile(
+  profile: Pick<
+    ApplicationProfile,
+    "franchise_type_code" | "region_name" | "province_name"
+  >,
+  allSlots: SlotEntry[]
+): SlotEntry[] {
+  const byFranchise = allSlots.filter(
+    (slot) => slot.franchiseTypeCode === profile.franchise_type_code
+  );
+  if (profile.province_name) {
+    const provinceMatches = byFranchise.filter(
+      (slot) => slot.scope === "province" && slot.provinceName === profile.province_name
+    );
+    if (provinceMatches.length > 0) return provinceMatches;
+  }
+  return byFranchise.filter(
+    (slot) => slot.scope === "region" && slot.regionName === profile.region_name
+  );
+}
+
 export function shouldAutoSubmitProfile(params: {
   profile: Pick<
     ApplicationProfile,
@@ -191,14 +212,10 @@ export function shouldAutoSubmitProfile(params: {
   }
 
   if (submitHourly) {
-    const hasOpenSlot = allSlots.some((slot) => {
-      if (slot.remaining < profile.number_of_units) return false;
-      if (slot.franchiseTypeCode !== profile.franchise_type_code) return false;
-      if (profile.province_name && slot.scope === "province") {
-        return slot.provinceName === profile.province_name;
-      }
-      return slot.regionName === profile.region_name;
-    });
+    const matchingSlots = getMatchingSlotsForProfile(profile, allSlots);
+    const hasOpenSlot = matchingSlots.some(
+      (slot) => slot.remaining >= profile.number_of_units
+    );
 
     const hourElapsed =
       Number.isNaN(lastMs) || now.getTime() - lastMs >= 55 * 60_000;
@@ -208,13 +225,7 @@ export function shouldAutoSubmitProfile(params: {
   }
 
   if (submitOnIncrease) {
-    const matchingSlots = allSlots.filter((slot) => {
-      if (slot.franchiseTypeCode !== profile.franchise_type_code) return false;
-      if (profile.province_name && slot.scope === "province") {
-        return slot.provinceName === profile.province_name;
-      }
-      return slot.regionName === profile.region_name;
-    });
+    const matchingSlots = getMatchingSlotsForProfile(profile, allSlots);
 
     const increasedAndEnough = matchingSlots.some((slot) => {
       if (slot.remaining < profile.number_of_units) return false;
