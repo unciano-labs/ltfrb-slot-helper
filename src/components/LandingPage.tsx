@@ -117,10 +117,10 @@ export default function LandingPage() {
               FAQ
             </a>
             <Link
-              href="/dashboard"
+              href={summary.userEmail ? "/dashboard" : "/login"}
               className="inline-flex min-h-12 items-center rounded-xl bg-[#1447E6] px-5 py-2.5 text-base font-bold text-white hover:bg-[#1039B8] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
             >
-              {summary.userEmail ? "My Dashboard" : "Open Slot Monitor"}
+              {summary.userEmail ? "My Dashboard" : "Sign In / Register"}
             </Link>
           </nav>
         </div>
@@ -146,20 +146,17 @@ export default function LandingPage() {
 
             <div className="mt-9 flex flex-col gap-4 sm:flex-row sm:flex-wrap">
               <Link
-                href="/dashboard"
+                href={summary.userEmail ? "/dashboard" : "/login"}
                 className="inline-flex min-h-12 items-center justify-center rounded-xl bg-white px-7 py-4 text-lg font-bold text-[#102E7A] hover:bg-[#EFF6FF] focus:outline-none focus:ring-4 focus:ring-white/40"
               >
-                Check Live Slots &amp; Dashboard
+                {summary.userEmail ? "Open My Dashboard" : "Sign In to Open Dashboard"}
               </Link>
 
-              <Link
-                href={summary.userEmail ? "/dashboard" : "/login"}
-                className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#1447E6] px-7 py-4 text-lg font-bold text-white hover:bg-[#1D4ED8] focus:outline-none focus:ring-4 focus:ring-white/40"
-              >
-                {summary.userEmail
-                  ? `Signed in (${summary.userEmail})`
-                  : "Sign In / Create Account"}
-              </Link>
+              {summary.userEmail && (
+                <span className="inline-flex min-h-12 items-center rounded-xl bg-[#1447E6] px-6 py-4 text-lg font-bold text-white">
+                  Signed in as {summary.userEmail}
+                </span>
+              )}
             </div>
           </ScrollReveal>
         </div>
@@ -182,10 +179,12 @@ export default function LandingPage() {
               </div>
 
               <Link
-                href="/dashboard"
+                href={summary.userEmail ? "/dashboard" : "/login"}
                 className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-[#1447E6] px-6 py-3.5 text-lg font-bold text-white hover:bg-[#1039B8] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
               >
-                View All Regions &amp; Provinces
+                {summary.userEmail
+                  ? "View All Regions & Provinces"
+                  : "Sign In to View All Regions"}
               </Link>
             </div>
 
@@ -458,21 +457,16 @@ export default function LandingPage() {
           <ScrollReveal>
             <h2 className="text-3xl font-bold sm:text-4xl">Ready to Watch Your LTFRB Slots?</h2>
             <p className="mx-auto mt-3 max-w-2xl text-xl leading-relaxed text-[#EFF6FF]">
-              Open the live slot dashboard now or sign in to set up your 15-minute email alerts and
-              automatic reservation.
+              {summary.userEmail
+                ? "Go to your dashboard to manage your 15-minute email alerts and automatic reservation."
+                : "Sign in or create a free account first to access your dashboard, 15-minute email alerts, and automatic reservation."}
             </p>
             <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
               <Link
-                href="/dashboard"
+                href={summary.userEmail ? "/dashboard" : "/login"}
                 className="inline-flex min-h-12 items-center justify-center rounded-xl bg-white px-7 py-4 text-lg font-bold text-[#102E7A] hover:bg-[#EFF6FF] focus:outline-none focus:ring-4 focus:ring-white/40"
               >
-                Open Slot Dashboard
-              </Link>
-              <Link
-                href="/login"
-                className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#102E7A] px-7 py-4 text-lg font-bold text-white hover:bg-[#0B225C] focus:outline-none focus:ring-4 focus:ring-white/40"
-              >
-                Sign In / Create Account
+                {summary.userEmail ? "Open My Dashboard" : "Sign In / Create Account"}
               </Link>
             </div>
           </ScrollReveal>

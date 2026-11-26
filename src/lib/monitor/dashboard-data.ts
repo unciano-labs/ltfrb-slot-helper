@@ -106,11 +106,12 @@ function mapSnapshotRow(row: Record<string, unknown>): SlotEntry {
  */
 export async function loadDashboardData(options?: {
   mode?: SlotLoadMode;
+  knownUser?: { id: string; email: string | null } | null;
 }): Promise<DashboardPayload> {
   const mode: SlotLoadMode = options?.mode ?? "auto";
   const supabaseReady = isSupabaseConfigured();
 
-  let user: { id: string; email: string | null } | null = null;
+  let user: { id: string; email: string | null } | null = options?.knownUser ?? null;
   let savedAccount: SavedAccountSummary | null = null;
   let monitoredFranchiseCodes: string[] = [];
   let lastRun: CronRunSummary | null = null;
@@ -130,7 +131,7 @@ export async function loadDashboardData(options?: {
 
     // Phase 1: resolve user session, latest snapshot timestamp, and latest cron run in parallel
     const [authUser, latestSnapRes, lastRunRes] = await Promise.all([
-      getAuthenticatedUser(),
+      options?.knownUser !== undefined ? Promise.resolve(null) : getAuthenticatedUser(),
       mode === "live"
         ? Promise.resolve({ data: null })
         : supabase

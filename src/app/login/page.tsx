@@ -76,8 +76,8 @@ export default function LoginPage() {
             {mode === "login" ? "Sign In to Your Account" : "Create a New Account"}
           </h1>
           <p className="mt-2 text-lg leading-relaxed text-[#374151]">
-            Sign in so you can set email alerts, save your LTFRB login safely, and turn on
-            automatic slot reservation.
+            Sign in or register an account to open your LTFRB dashboard, set email alerts, save your
+            LTFRB login safely, and turn on automatic slot reservation.
           </p>
 
           <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">

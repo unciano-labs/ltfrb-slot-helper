@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import AutoReserveTab from "@/components/AutoReserveTab";
 import FranchisePickerCard from "@/components/FranchisePickerCard";
@@ -48,6 +49,7 @@ function formatManilaTime(iso: string | null | undefined): string {
 }
 
 export default function MonitorApp({ initialData }: MonitorAppProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<ActiveTab>("slots");
   const [loading, setLoading] = useState(!initialData);
   const [refreshingLiveSlots, setRefreshingLiveSlots] = useState(false);
@@ -274,7 +276,8 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
     setRecentNotifications([]);
     setReservationProfiles([]);
     setSubmissionLogs([]);
-    setBanner({ kind: "info", text: "You have signed out." });
+    router.replace("/login");
+    router.refresh();
   }
 
   async function handleCheckNow() {
