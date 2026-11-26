@@ -45,10 +45,13 @@ export async function sendSlotAvailableEmail(params: {
 }): Promise<SlotAlertEmailResult> {
   const gmailUser = getOptionalEnv("GMAIL_USER");
   const fromName = getOptionalEnv("GMAIL_FROM_NAME") ?? "LTFRB Slot Helper";
-  const appUrl =
+  const rawAppUrl =
     getOptionalEnv("NEXT_PUBLIC_APP_URL") ??
     getOptionalEnv("APP_URL") ??
     "https://ltfrb-foa.ph/";
+  const appUrl = rawAppUrl.includes("ltfrb-foa.ph")
+    ? rawAppUrl
+    : `${rawAppUrl.replace(/\/$/, "")}/dashboard`;
 
   const transporter = createGmailTransporter();
   if (!transporter || !gmailUser) {

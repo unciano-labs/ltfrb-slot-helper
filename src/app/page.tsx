@@ -1,5 +1,5 @@
-import MonitorApp from "@/components/MonitorApp";
+import LandingPage from "@/components/LandingPage";
 
 export default function HomePage() {
-  return <MonitorApp />;
+  return <LandingPage />;
 }

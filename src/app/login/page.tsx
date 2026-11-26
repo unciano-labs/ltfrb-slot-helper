@@ -49,7 +49,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/");
+      router.push("/dashboard");
       router.refresh();
     } catch (err) {
       setFeedback({
@@ -62,13 +62,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F6F5F1] px-5 py-10 text-[#17191C] sm:px-8">
+    <div className="min-h-screen bg-[#F4F4F5] px-5 py-10 text-[#0A0A0A] sm:px-8">
       <div className="mx-auto max-w-xl">
         <Link
           href="/"
-          className="inline-flex min-h-12 items-center rounded-xl bg-[#EEF1F4] px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+          className="inline-flex min-h-12 items-center rounded-xl bg-white px-5 py-3 text-lg font-bold text-[#0A0A0A] hover:bg-[#E4E4E7] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
         >
-          Back to Slot Helper
+          Back to Home
         </Link>
 
         <div className="mt-6 rounded-2xl bg-white p-6 sm:p-8">

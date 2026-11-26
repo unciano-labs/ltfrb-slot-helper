@@ -436,11 +436,18 @@ export default function MonitorApp() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/"
+                className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-[#EEF1F4] px-5 py-3.5 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+              >
+                Home
+              </Link>
+
               <button
                 type="button"
                 onClick={handleCheckNow}
                 disabled={checkingNow}
-                className="min-h-12 shrink-0 rounded-xl bg-[#1D4ED8] px-6 py-3.5 text-lg font-bold text-white transition-colors hover:bg-[#1E40AF] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-60"
+                className="min-h-12 shrink-0 rounded-xl bg-[#1447E6] px-6 py-3.5 text-lg font-bold text-white transition-colors hover:bg-[#1039B8] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-60"
               >
                 {checkingNow ? "Checking LTFRB..." : "Check Slots Now"}
               </button>
