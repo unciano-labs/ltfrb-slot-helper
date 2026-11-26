@@ -15,7 +15,12 @@ import { getTenantContext } from "@/lib/supabase/server";
  */
 export async function ensureProjectUserRecord(
   userId: string,
-  userEmail: string | null | undefined
+  userEmail: string | null | undefined,
+  profile?: {
+    firstName?: string | null;
+    lastName?: string | null;
+    mobile?: string | null;
+  }
 ): Promise<void> {
   if (!isSupabaseConfigured() || !userId) return;
   try {
@@ -23,18 +28,38 @@ export async function ensureProjectUserRecord(
     const isAdmin = isSuperAdminEmail(userEmail);
     const now = new Date().toISOString();
 
-    await supabase.from("ltfrb_subscriptions").upsert(
-      {
-        website_id: websiteId,
-        user_id: userId,
-        user_email: (userEmail ?? "unknown@example.com").trim(),
-        plan_code: isAdmin ? "annual_1699" : "free",
-        status: isAdmin ? "active" : "unpaid",
-        created_at: now,
-        updated_at: now,
-      },
-      { onConflict: "website_id,user_id", ignoreDuplicates: true }
-    );
+    const basePayload = {
+      website_id: websiteId,
+      user_id: userId,
+      user_email: (userEmail ?? "unknown@example.com").trim(),
+      plan_code: isAdmin ? "annual_1699" : "free",
+      status: isAdmin ? "active" : "unpaid",
+      created_at: now,
+      updated_at: now,
+    };
+
+    const withProfile =
+      profile?.firstName || profile?.lastName || profile?.mobile
+        ? {
+            ...basePayload,
+            first_name: profile.firstName ?? null,
+            last_name: profile.lastName ?? null,
+            mobile: profile.mobile ?? null,
+          }
+        : basePayload;
+
+    const { error } = await supabase.from("ltfrb_subscriptions").upsert(withProfile, {
+      onConflict: "website_id,user_id",
+      ignoreDuplicates: true,
+    });
+
+    // If migration 005 columns aren't applied yet, retry without them so user link still succeeds
+    if (error && (error.message.includes("column") || error.code === "42703" || error.code === "PGRST204")) {
+      await supabase.from("ltfrb_subscriptions").upsert(basePayload, {
+        onConflict: "website_id,user_id",
+        ignoreDuplicates: true,
+      });
+    }
   } catch {
     // Gracefully skip if migration 004 has not been applied yet
   }

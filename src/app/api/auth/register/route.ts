@@ -1,24 +1,46 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getWebsiteId } from "@/lib/env";
 import { ensureProjectUserRecord } from "@/lib/monitor/entitlements";
+import {
+  checkAndRecordRegistrationRateLimit,
+  extractClientIp,
+  validateAndNormalizeRegistrationInput,
+} from "@/lib/security/registration";
 import { createSupabaseAuthServerClient } from "@/lib/supabase/auth-server";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
-  const email = String(body?.email ?? "").trim();
-  const password = String(body?.password ?? "");
+  const ip = extractClientIp(request);
+  const rawEmail = String(body?.email ?? "");
 
-  if (!email || password.length < 6) {
+  const rateLimit = await checkAndRecordRegistrationRateLimit({
+    ip,
+    email: rawEmail,
+  });
+
+  if (!rateLimit.allowed) {
     return NextResponse.json(
-      { error: "Please enter a valid email and a password of at least 6 characters." },
-      { status: 400 }
+      { error: rateLimit.message || "Too many account creation attempts. Please wait and try again." },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(rateLimit.retryAfterSeconds),
+        },
+      }
     );
   }
 
+  const parsed = validateAndNormalizeRegistrationInput(body);
+  if (!parsed.valid) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
+  }
+
+  const { firstName, lastName, fullName, mobile, email, password } = parsed.data;
   const websiteId = getWebsiteId();
   const supabase = await createSupabaseAuthServerClient();
+
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -26,6 +48,10 @@ export async function POST(request: NextRequest) {
       data: {
         website_id: websiteId,
         registered_project: "ltfrb-slot-helper",
+        first_name: firstName,
+        last_name: lastName,
+        full_name: fullName,
+        mobile,
       },
     },
   });
@@ -35,7 +61,11 @@ export async function POST(request: NextRequest) {
   }
 
   if (data.user?.id) {
-    await ensureProjectUserRecord(data.user.id, data.user.email ?? email);
+    await ensureProjectUserRecord(data.user.id, data.user.email ?? email, {
+      firstName,
+      lastName,
+      mobile,
+    });
   }
 
   if (!data.session) {

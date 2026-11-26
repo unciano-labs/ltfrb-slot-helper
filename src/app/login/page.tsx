@@ -7,6 +7,9 @@ import { useState } from "react";
 export default function LoginPage() {
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [mobile, setMobile] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -21,10 +24,20 @@ export default function LoginPage() {
 
     try {
       const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
+      const payload =
+        mode === "login"
+          ? { email: email.trim(), password }
+          : {
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+              mobile: mobile.trim(),
+              email: email.trim(),
+              password,
+            };
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify(payload),
       });
 
       const data = (await res.json()) as {
@@ -125,6 +138,70 @@ export default function LoginPage() {
           )}
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-6">
+            {mode === "register" && (
+              <>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="auth-first-name"
+                      className="block text-lg font-bold text-[#17191C]"
+                    >
+                      First Name
+                    </label>
+                    <input
+                      id="auth-first-name"
+                      type="text"
+                      required
+                      autoComplete="given-name"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="Juan"
+                      className="mt-2 min-h-12 w-full rounded-xl bg-[#EEF1F4] px-4 py-3 text-lg text-[#17191C] focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="auth-last-name"
+                      className="block text-lg font-bold text-[#17191C]"
+                    >
+                      Last Name
+                    </label>
+                    <input
+                      id="auth-last-name"
+                      type="text"
+                      required
+                      autoComplete="family-name"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="Dela Cruz"
+                      className="mt-2 min-h-12 w-full rounded-xl bg-[#EEF1F4] px-4 py-3 text-lg text-[#17191C] focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="auth-mobile" className="block text-lg font-bold text-[#17191C]">
+                    Mobile Number
+                  </label>
+                  <input
+                    id="auth-mobile"
+                    type="tel"
+                    required
+                    autoComplete="tel"
+                    value={mobile}
+                    onChange={(e) => setMobile(e.target.value)}
+                    placeholder="09171234567"
+                    className="mt-2 min-h-12 w-full rounded-xl bg-[#EEF1F4] px-4 py-3 text-lg text-[#17191C] focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                  />
+                  <p className="mt-1.5 text-base text-[#4B5563]">
+                    Enter your Philippine mobile number (example: 09171234567) so we can verify
+                    your account and GCash/Maya payments.
+                  </p>
+                </div>
+              </>
+            )}
+
             <div>
               <label htmlFor="auth-email" className="block text-lg font-bold text-[#17191C]">
                 Your Email Address

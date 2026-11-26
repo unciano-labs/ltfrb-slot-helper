@@ -209,9 +209,23 @@ export async function GET() {
       monitoredCodesCount: monitoredCodes.length,
     });
 
+    const meta = (au.user_metadata ?? {}) as Record<string, unknown>;
+    const firstName =
+      sub?.first_name ?? (typeof meta.first_name === "string" ? meta.first_name : null);
+    const lastName =
+      sub?.last_name ?? (typeof meta.last_name === "string" ? meta.last_name : null);
+    const fullName =
+      [firstName, lastName].filter(Boolean).join(" ").trim() ||
+      (typeof meta.full_name === "string" ? meta.full_name : null);
+    const mobile = sub?.mobile ?? (typeof meta.mobile === "string" ? meta.mobile : null);
+
     return {
       userId: au.id,
       email: au.email ?? sub?.user_email ?? "Unknown",
+      firstName,
+      lastName,
+      fullName,
+      mobile,
       createdAt: au.created_at,
       lastSignInAt: au.last_sign_in_at ?? null,
       emailConfirmedAt: au.email_confirmed_at ?? null,

@@ -26,7 +26,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  await ensureProjectUserRecord(data.user.id, data.user.email ?? email);
+  const meta = (data.user.user_metadata ?? {}) as Record<string, unknown>;
+  await ensureProjectUserRecord(data.user.id, data.user.email ?? email, {
+    firstName: typeof meta.first_name === "string" ? meta.first_name : null,
+    lastName: typeof meta.last_name === "string" ? meta.last_name : null,
+    mobile: typeof meta.mobile === "string" ? meta.mobile : null,
+  });
 
   return NextResponse.json({
     ok: true,

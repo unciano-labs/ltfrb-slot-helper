@@ -16,6 +16,10 @@ import type { CronRunSummary } from "@/lib/monitor/dashboard-data";
 interface AdminUserRow {
   userId: string;
   email: string;
+  firstName: string | null;
+  lastName: string | null;
+  fullName: string | null;
+  mobile: string | null;
   createdAt: string;
   lastSignInAt: string | null;
   emailConfirmedAt: string | null;
@@ -288,7 +292,12 @@ export default function SuperAdminConsole({ adminEmail }: { adminEmail: string }
     const list = data?.users ?? [];
     const q = userSearch.trim().toLowerCase();
     return list.filter((u) => {
-      if (q && !u.email.toLowerCase().includes(q)) return false;
+      if (q) {
+        const haystack = [u.email, u.fullName ?? "", u.firstName ?? "", u.lastName ?? "", u.mobile ?? ""]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
       if (userFilter === "disabled") return u.entitlements.isDisabled;
       if (userFilter === "active") return u.entitlements.isActivePlan && !u.entitlements.isDisabled;
       if (userFilter === "pending") return u.entitlements.status === "pending";
@@ -732,7 +741,7 @@ export default function SuperAdminConsole({ adminEmail }: { adminEmail: string }
                     type="search"
                     value={userSearch}
                     onChange={(e) => setUserSearch(e.target.value)}
-                    placeholder="Search registered users by email..."
+                    placeholder="Search registered users by name, email, or mobile..."
                     className="min-h-12 w-full rounded-xl bg-[#EEF1F4] px-4 py-3 text-lg text-[#0A0A0A]"
                   />
 
@@ -772,7 +781,9 @@ export default function SuperAdminConsole({ adminEmail }: { adminEmail: string }
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                           <div>
                             <div className="flex flex-wrap items-center gap-2">
-                              <h3 className="text-2xl font-bold text-[#0A0A0A]">{u.email}</h3>
+                              <h3 className="text-2xl font-bold text-[#0A0A0A]">
+                                {u.fullName ? `${u.fullName} (${u.email})` : u.email}
+                              </h3>
                               {u.entitlements.isSuperAdmin && (
                                 <span className="rounded-xl bg-[#102E7A] px-3 py-1 text-base font-bold text-white">
                                   SuperAdmin
@@ -795,6 +806,13 @@ export default function SuperAdminConsole({ adminEmail }: { adminEmail: string }
                               )}
                             </div>
 
+                            {(u.mobile || u.fullName) && (
+                              <p className="mt-2 text-lg text-[#0A0A0A]">
+                                {u.fullName ? <span>Name: <strong>{u.fullName}</strong></span> : null}
+                                {u.fullName && u.mobile ? " • " : null}
+                                {u.mobile ? <span>Mobile: <strong>{u.mobile}</strong></span> : null}
+                              </p>
+                            )}
                             <p className="mt-2 text-base text-[#52525B]">
                               Joined: {formatManila(u.createdAt)} • Last Sign-In:{" "}
                               {formatManila(u.lastSignInAt)}

@@ -20,6 +20,9 @@ export interface SubscriptionRow {
   website_id: string;
   user_id: string;
   user_email: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  mobile?: string | null;
   plan_code: SubscriptionPlanCode;
   status: SubscriptionStatus;
   is_disabled: boolean;
