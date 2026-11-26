@@ -26,10 +26,11 @@ export default function LandingPage() {
     let active = true;
     async function load() {
       try {
-        const res = await fetch("/api/slots", { cache: "no-store" });
+        const res = await fetch("/api/slots?mode=cached", { cache: "no-store" });
         if (!res.ok) throw new Error("Failed");
         const data = (await res.json()) as {
           regionSlots?: SlotEntry[];
+          isStale?: boolean;
           user?: { email?: string | null } | null;
         };
         const regions = data.regionSlots ?? [];
@@ -38,12 +39,36 @@ export default function LandingPage() {
 
         if (active) {
           setSummary({
-            loading: false,
+            loading: regions.length === 0,
             totalTracked: regions.length,
             openCount: open.length,
             highlighted: sorted,
             userEmail: data.user?.email ?? null,
           });
+        }
+
+        if (active && (regions.length === 0 || data.isStale)) {
+          const liveRes = await fetch("/api/slots?mode=live", { cache: "no-store" });
+          if (liveRes.ok && active) {
+            const liveData = (await liveRes.json()) as {
+              regionSlots?: SlotEntry[];
+              user?: { email?: string | null } | null;
+            };
+            const liveRegions = liveData.regionSlots ?? [];
+            const liveOpen = liveRegions.filter((s) => s.remaining > 0);
+            const liveSorted = [...liveRegions]
+              .sort((a, b) => b.remaining - a.remaining)
+              .slice(0, 4);
+            setSummary({
+              loading: false,
+              totalTracked: liveRegions.length,
+              openCount: liveOpen.length,
+              highlighted: liveSorted,
+              userEmail: liveData.user?.email ?? data.user?.email ?? null,
+            });
+          } else if (active) {
+            setSummary((prev) => ({ ...prev, loading: false }));
+          }
         }
       } catch {
         if (active) {

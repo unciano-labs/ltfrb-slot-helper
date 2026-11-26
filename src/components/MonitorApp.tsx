@@ -13,6 +13,13 @@ import type {
   SubmissionLogRow,
   WatchRule,
 } from "@/lib/ltfrb/types";
+import type {
+  CronRunSummary,
+  DashboardPayload,
+  NotificationLogSummary,
+  SavedAccountSummary,
+  SlotLoadMode,
+} from "@/lib/monitor/dashboard-data";
 
 type ActiveTab = "slots" | "alerts" | "account" | "reserve";
 
@@ -21,32 +28,12 @@ interface SessionUser {
   email: string | null;
 }
 
-interface CronRunRow {
-  id: string;
-  trigger_source: string;
-  started_at: string;
-  finished_at: string | null;
-  status: string;
-  records_checked: number;
-  alerts_sent: number;
-  error_message: string | null;
-}
+type CronRunRow = CronRunSummary;
+type NotificationLogRow = NotificationLogSummary;
+type SavedAccountRow = SavedAccountSummary;
 
-interface NotificationLogRow {
-  id: string;
-  slot_key: string;
-  recipient: string;
-  subject: string;
-  remaining_at_alert: number;
-  status: string;
-  sent_at: string;
-}
-
-interface SavedAccountRow {
-  id: string;
-  account_type: "operator" | "tnc";
-  ltfrb_email: string;
-  last_verified_at: string | null;
+interface MonitorAppProps {
+  initialData?: DashboardPayload;
 }
 
 function formatManilaTime(iso: string | null | undefined): string {
@@ -60,28 +47,45 @@ function formatManilaTime(iso: string | null | undefined): string {
   });
 }
 
-export default function MonitorApp() {
+export default function MonitorApp({ initialData }: MonitorAppProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>("slots");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialData);
+  const [refreshingLiveSlots, setRefreshingLiveSlots] = useState(false);
   const [checkingNow, setCheckingNow] = useState(false);
   const [banner, setBanner] = useState<{ kind: "success" | "error" | "info"; text: string } | null>(
     null
   );
 
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [monitoredFranchiseCodes, setMonitoredFranchiseCodes] = useState<string[]>([]);
+  const [user, setUser] = useState<SessionUser | null>(initialData?.user ?? null);
+  const [monitoredFranchiseCodes, setMonitoredFranchiseCodes] = useState<string[]>(
+    initialData?.monitoredFranchiseCodes ?? []
+  );
   const [showAllPublicSlots, setShowAllPublicSlots] = useState(false);
-  const [supabaseConfigured, setSupabaseConfigured] = useState(false);
-  const [fetchedAt, setFetchedAt] = useState<string | null>(null);
-  const [franchiseTypes, setFranchiseTypes] = useState<FranchiseType[]>([]);
-  const [regionSlots, setRegionSlots] = useState<SlotEntry[]>([]);
-  const [provinceSlots, setProvinceSlots] = useState<SlotEntry[]>([]);
-  const [lastRun, setLastRun] = useState<CronRunRow | null>(null);
-  const [watchRules, setWatchRules] = useState<WatchRule[]>([]);
-  const [recentNotifications, setRecentNotifications] = useState<NotificationLogRow[]>([]);
-  const [reservationProfiles, setReservationProfiles] = useState<ApplicationProfile[]>([]);
-  const [submissionLogs, setSubmissionLogs] = useState<SubmissionLogRow[]>([]);
-  const [savedAccount, setSavedAccount] = useState<SavedAccountRow | null>(null);
+  const [supabaseConfigured, setSupabaseConfigured] = useState(
+    Boolean(initialData?.supabaseConfigured)
+  );
+  const [fetchedAt, setFetchedAt] = useState<string | null>(initialData?.fetchedAt ?? null);
+  const [franchiseTypes, setFranchiseTypes] = useState<FranchiseType[]>(
+    initialData?.franchiseTypes ?? []
+  );
+  const [regionSlots, setRegionSlots] = useState<SlotEntry[]>(initialData?.regionSlots ?? []);
+  const [provinceSlots, setProvinceSlots] = useState<SlotEntry[]>(
+    initialData?.provinceSlots ?? []
+  );
+  const [lastRun, setLastRun] = useState<CronRunRow | null>(initialData?.lastRun ?? null);
+  const [watchRules, setWatchRules] = useState<WatchRule[]>(initialData?.watchRules ?? []);
+  const [recentNotifications, setRecentNotifications] = useState<NotificationLogRow[]>(
+    initialData?.recentNotifications ?? []
+  );
+  const [reservationProfiles, setReservationProfiles] = useState<ApplicationProfile[]>(
+    initialData?.reservationProfiles ?? []
+  );
+  const [submissionLogs, setSubmissionLogs] = useState<SubmissionLogRow[]>(
+    initialData?.submissionLogs ?? []
+  );
+  const [savedAccount, setSavedAccount] = useState<SavedAccountRow | null>(
+    initialData?.savedAccount ?? null
+  );
 
   // Slot Explorer filters
   const [viewScope, setViewScope] = useState<SlotScope>("region");
@@ -92,10 +96,12 @@ export default function MonitorApp() {
   // New Email Alert form
   const [ruleLabel, setRuleLabel] = useState("");
   const [ruleScope, setRuleScope] = useState<SlotScope>("region");
-  const [ruleFranchiseCode, setRuleFranchiseCode] = useState("TNVS");
+  const [ruleFranchiseCode, setRuleFranchiseCode] = useState(
+    initialData?.monitoredFranchiseCodes?.[0] ?? "TNVS"
+  );
   const [ruleRegionCode, setRuleRegionCode] = useState("ALL");
   const [ruleProvinceCode, setRuleProvinceCode] = useState("ALL");
-  const [ruleEmail, setRuleEmail] = useState("");
+  const [ruleEmail, setRuleEmail] = useState(initialData?.user?.email ?? "");
   const [ruleCooldown, setRuleCooldown] = useState("60");
   const [notifyWhenAvailable, setNotifyWhenAvailable] = useState(true);
   const [notifyWhenIncreased, setNotifyWhenIncreased] = useState(true);
@@ -108,59 +114,89 @@ export default function MonitorApp() {
   const [ltfrbPassword, setLtfrbPassword] = useState("");
   const [savingAccount, setSavingAccount] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const applyPayload = useCallback((slotsJson: DashboardPayload) => {
+    setUser(slotsJson.user ?? null);
+    const savedCodes: string[] = slotsJson.monitoredFranchiseCodes ?? [];
+    setMonitoredFranchiseCodes(savedCodes);
+    if (savedCodes.length > 0) {
+      setRuleFranchiseCode((prev) => (savedCodes.includes(prev) ? prev : savedCodes[0]));
+    }
+    if (slotsJson.user?.email) {
+      setRuleEmail((prev) => prev || slotsJson.user?.email || "");
+    }
+    setSupabaseConfigured(Boolean(slotsJson.supabaseConfigured));
+    setFetchedAt(slotsJson.fetchedAt ?? null);
+    setFranchiseTypes(slotsJson.franchiseTypes ?? []);
+    setRegionSlots(slotsJson.regionSlots ?? []);
+    setProvinceSlots(slotsJson.provinceSlots ?? []);
+    setLastRun(slotsJson.lastRun ?? null);
+    setWatchRules(slotsJson.watchRules ?? []);
+    setRecentNotifications(slotsJson.recentNotifications ?? []);
+    setReservationProfiles(slotsJson.reservationProfiles ?? []);
+    setSubmissionLogs(slotsJson.submissionLogs ?? []);
+    setSavedAccount(slotsJson.savedAccount ?? null);
+  }, []);
+
+  const refreshLiveSlots = useCallback(async () => {
+    setRefreshingLiveSlots(true);
     try {
-      const [slotsRes, acctRes] = await Promise.all([
-        fetch("/api/slots", { cache: "no-store" }),
-        fetch("/api/ltfrb/account", { cache: "no-store" }),
-      ]);
-
-      const slotsJson = await slotsRes.json();
-      if (!slotsRes.ok) {
-        throw new Error(slotsJson.error || "Could not load LTFRB slot data.");
+      const res = await fetch("/api/slots?mode=live", { cache: "no-store" });
+      if (!res.ok) return;
+      const liveJson = (await res.json()) as DashboardPayload;
+      setFetchedAt(liveJson.fetchedAt ?? null);
+      if (liveJson.franchiseTypes?.length) {
+        setFranchiseTypes(liveJson.franchiseTypes);
       }
-
-      setUser(slotsJson.user ?? null);
-      const savedCodes: string[] = slotsJson.monitoredFranchiseCodes ?? [];
-      setMonitoredFranchiseCodes(savedCodes);
-      if (savedCodes.length > 0) {
-        setRuleFranchiseCode((prev) => (savedCodes.includes(prev) ? prev : savedCodes[0]));
-      }
-      if (slotsJson.user?.email) {
-        setRuleEmail((prev) => prev || slotsJson.user.email);
-      }
-      setSupabaseConfigured(Boolean(slotsJson.supabaseConfigured));
-      setFetchedAt(slotsJson.fetchedAt ?? null);
-      setFranchiseTypes(slotsJson.franchiseTypes ?? []);
-      setRegionSlots(slotsJson.regionSlots ?? []);
-      setProvinceSlots(slotsJson.provinceSlots ?? []);
-      setLastRun(slotsJson.lastRun ?? null);
-      setWatchRules(slotsJson.watchRules ?? []);
-      setRecentNotifications(slotsJson.recentNotifications ?? []);
-      setReservationProfiles(slotsJson.reservationProfiles ?? []);
-      setSubmissionLogs(slotsJson.submissionLogs ?? []);
-
-      if (acctRes.ok) {
-        const acctJson = await acctRes.json();
-        setSavedAccount(acctJson.account ?? null);
-      }
-    } catch (err) {
-      setBanner({
-        kind: "error",
-        text:
-          err instanceof Error
-            ? err.message
-            : "We could not connect to LTFRB right now. Please try again in a minute.",
-      });
+      setRegionSlots(liveJson.regionSlots ?? []);
+      setProvinceSlots(liveJson.provinceSlots ?? []);
     } finally {
-      setLoading(false);
+      setRefreshingLiveSlots(false);
     }
   }, []);
 
+  const loadData = useCallback(
+    async (mode: SlotLoadMode = "cached") => {
+      try {
+        const slotsRes = await fetch(`/api/slots?mode=${mode}`, { cache: "no-store" });
+        const slotsJson = (await slotsRes.json()) as DashboardPayload & { error?: string };
+        if (!slotsRes.ok) {
+          throw new Error(slotsJson.error || "Could not load LTFRB slot data.");
+        }
+
+        applyPayload(slotsJson);
+
+        if (
+          mode === "cached" &&
+          (slotsJson.regionSlots.length === 0 || slotsJson.isStale)
+        ) {
+          void refreshLiveSlots();
+        }
+      } catch (err) {
+        setBanner({
+          kind: "error",
+          text:
+            err instanceof Error
+              ? err.message
+              : "We could not connect to LTFRB right now. Please try again in a minute.",
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [applyPayload, refreshLiveSlots]
+  );
+
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    if (initialData) {
+      applyPayload(initialData);
+      setLoading(false);
+      if (initialData.regionSlots.length === 0 || initialData.isStale) {
+        void refreshLiveSlots();
+      }
+      return;
+    }
+    void loadData("cached");
+  }, [applyPayload, initialData, loadData, refreshLiveSlots]);
 
   const hasAccountFranchiseFilter =
     Boolean(user) && monitoredFranchiseCodes.length > 0 && !showAllPublicSlots;
@@ -247,7 +283,7 @@ export default function MonitorApp() {
 
     try {
       if (!supabaseConfigured || !user) {
-        await loadData();
+        await loadData("live");
         setBanner({
           kind: "info",
           text: user
@@ -702,7 +738,7 @@ export default function MonitorApp() {
               </div>
             </div>
 
-            {loading ? (
+            {loading || (refreshingLiveSlots && regionSlots.length === 0) ? (
               <div className="rounded-2xl bg-white p-8 text-center text-xl font-bold text-[#374151]">
                 Loading live slot counts from LTFRB...
               </div>

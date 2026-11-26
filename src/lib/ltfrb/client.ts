@@ -97,12 +97,20 @@ export function normalizeProvinceSlots(items: RawProvinceSlotItem[]): SlotEntry[
   });
 }
 
-export async function fetchFranchiseTypes(): Promise<FranchiseType[]> {
+export function getCachedFranchiseTypesFromMemory(): FranchiseType[] | null {
   if (
     cachedFranchiseTypes &&
     Date.now() - cachedFranchiseTypes.fetchedAtMs < FRANCHISE_TYPES_TTL_MS
   ) {
     return cachedFranchiseTypes.data;
+  }
+  return null;
+}
+
+export async function fetchFranchiseTypes(): Promise<FranchiseType[]> {
+  const cached = getCachedFranchiseTypesFromMemory();
+  if (cached) {
+    return cached;
   }
 
   const payload = await fetchLtfrbJson<{ data?: RawFranchiseTypeItem[] }>(
@@ -186,8 +194,11 @@ export async function fetchAllSlots(): Promise<{
   provinceSlots: SlotEntry[];
 }> {
   // Fetch sequentially with a small polite jitter instead of concurrent bursts
+  const hadCachedTypes = Boolean(getCachedFranchiseTypesFromMemory());
   const franchiseTypes = await fetchFranchiseTypes();
-  await politeDelay();
+  if (!hadCachedTypes) {
+    await politeDelay();
+  }
   const regionSlots = await fetchRegionSlots();
   await politeDelay();
   const provinceSlots = await fetchProvinceSlots();
