@@ -14,11 +14,16 @@ jobs:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "Skipping: set APP_URL and CRON_SECRET in GitHub Repository Secrets."
-            exit 0
+          if [ -z "$APP_URL" ]; then
+            echo "::error::Missing GitHub Repository Secret: APP_URL (set it under Settings -> Secrets and variables -> Actions -> Repository secrets)"
+            exit 1
+          fi
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::Missing GitHub Repository Secret: CRON_SECRET (set it under Settings -> Secrets and variables -> Actions -> Repository secrets)"
+            exit 1
           fi
           TARGET_URL="${APP_URL%/}/api/cron/check-slots"
+          echo "Calling $TARGET_URL"
           curl -fsS -X POST "$TARGET_URL" \
             -H "Authorization: Bearer $CRON_SECRET" \
             -H "Accept: application/json"
