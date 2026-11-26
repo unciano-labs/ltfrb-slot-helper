@@ -325,7 +325,35 @@ describe("LTFRB normalizers and watch rules", () => {
       "slot_increased"
     );
 
-    // 12:05 AM PHT (16:05 UTC) triggers submit_at_midnight
+    // Scheduled hours: 12:05 AM PHT (16:05 UTC), 7:10 AM PHT (23:10 UTC), 8:05 AM PHT (00:05 UTC)
+    for (const utcIso of [
+      "2026-11-27T16:05:00Z", // 00:05 PHT
+      "2026-11-27T23:10:00Z", // 07:10 PHT
+      "2026-11-28T00:05:00Z", // 08:05 PHT
+    ]) {
+      assert.equal(
+        shouldAutoSubmitProfile({
+          profile: {
+            is_armed: true,
+            lock_status: "idle",
+            franchise_type_code: "E_TNVS",
+            region_name: "National Capital Region (NCR)",
+            province_name: null,
+            number_of_units: 1,
+            submit_on_slot_increase: false,
+            submit_at_midnight: true,
+            submit_hourly: false,
+            last_attempted_at: null,
+          },
+          allSlots: [],
+          prevRemainingMap: new Map(),
+          now: new Date(utcIso),
+        }).reason,
+        "scheduled_hours"
+      );
+    }
+
+    // Outside 12MN/7AM/8AM (9:05 AM PHT = 01:05 UTC) or duplicate within 25 mins skips
     assert.equal(
       shouldAutoSubmitProfile({
         profile: {
@@ -342,9 +370,30 @@ describe("LTFRB normalizers and watch rules", () => {
         },
         allSlots: [],
         prevRemainingMap: new Map(),
-        now: new Date("2026-11-27T16:05:00Z"),
-      }).reason,
-      "midnight_window"
+        now: new Date("2026-11-28T01:05:00Z"),
+      }).shouldSubmit,
+      false
+    );
+
+    assert.equal(
+      shouldAutoSubmitProfile({
+        profile: {
+          is_armed: true,
+          lock_status: "idle",
+          franchise_type_code: "E_TNVS",
+          region_name: "National Capital Region (NCR)",
+          province_name: null,
+          number_of_units: 1,
+          submit_on_slot_increase: false,
+          submit_at_midnight: true,
+          submit_hourly: false,
+          last_attempted_at: "2026-11-27T23:02:00Z", // 7:02 AM PHT
+        },
+        allSlots: [],
+        prevRemainingMap: new Map(),
+        now: new Date("2026-11-27T23:17:00Z"), // 7:17 AM PHT
+      }).shouldSubmit,
+      false
     );
 
     // Hourly does NOT trigger when slot is 0 (full)

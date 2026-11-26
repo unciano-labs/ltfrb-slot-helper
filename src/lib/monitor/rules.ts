@@ -164,7 +164,7 @@ export function shouldAutoSubmitProfile(params: {
   allSlots: SlotEntry[];
   prevRemainingMap: Map<string, number>;
   now?: Date;
-}): { shouldSubmit: boolean; reason: "slot_increased" | "midnight_window" | "hourly" | "none" } {
+}): { shouldSubmit: boolean; reason: "slot_increased" | "scheduled_hours" | "hourly" | "none" } {
   const { profile, allSlots, prevRemainingMap } = params;
   const now = params.now ?? new Date();
 
@@ -173,18 +173,19 @@ export function shouldAutoSubmitProfile(params: {
   }
 
   const submitOnIncrease = profile.submit_on_slot_increase ?? true;
-  const submitAtMidnight = profile.submit_at_midnight ?? false;
+  const submitAtScheduledHours = profile.submit_at_midnight ?? false;
   const submitHourly = profile.submit_hourly ?? false;
   const lastMs = profile.last_attempted_at ? Date.parse(profile.last_attempted_at) : NaN;
 
-  if (submitAtMidnight) {
+  if (submitAtScheduledHours) {
     const { hour, minute } = getManilaHourMinute(now);
-    const inMidnightWindow = hour === 0 && minute < 30;
-    if (inMidnightWindow) {
+    const inScheduledWindow =
+      (hour === 0 || hour === 7 || hour === 8) && minute < 30;
+    if (inScheduledWindow) {
       const recentlyAttempted =
-        !Number.isNaN(lastMs) && now.getTime() - lastMs < 10 * 60_000;
+        !Number.isNaN(lastMs) && now.getTime() - lastMs < 25 * 60_000;
       if (!recentlyAttempted) {
-        return { shouldSubmit: true, reason: "midnight_window" };
+        return { shouldSubmit: true, reason: "scheduled_hours" };
       }
     }
   }

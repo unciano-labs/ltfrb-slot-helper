@@ -8,10 +8,17 @@ on:
 jobs:
   trigger-slot-check:
     runs-on: ubuntu-latest
-    if: ${{ secrets.APP_URL != '' && secrets.CRON_SECRET != '' }}
     steps:
       - name: Call Vercel slot monitor endpoint
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl -fsS -X POST "${{ secrets.APP_URL }}/api/cron/check-slots" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "Skipping: set APP_URL and CRON_SECRET in GitHub Repository Secrets."
+            exit 0
+          fi
+          TARGET_URL="${APP_URL%/}/api/cron/check-slots"
+          curl -fsS -X POST "$TARGET_URL" \
+            -H "Authorization: Bearer $CRON_SECRET" \
             -H "Accept: application/json"

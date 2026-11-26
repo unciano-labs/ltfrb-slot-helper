@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   ApplicationProfile,
   FranchiseType,
@@ -83,6 +83,62 @@ export default function AutoReserveTab({
 
   const [saving, setSaving] = useState(false);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  function resetFormToNew() {
+    setEditingProfileId(null);
+    setProfileName("");
+    setFranchiseTypeCode(monitoredFranchiseCodes[0] ?? "");
+    setSelectedRegionId("");
+    setSelectedProvinceId("");
+    setSelectedRouteId("");
+    setNotifyEmail(userEmail ?? "");
+    setArmImmediately(true);
+    setSubmitOnIncrease(true);
+    setSubmitAtMidnight(false);
+    setSubmitHourly(false);
+    setPlateNumber("");
+    setMvFileNumber("");
+    setMake("");
+    setSeries("");
+    setYearModel(String(new Date().getFullYear()));
+    setBodyType("Sedan");
+    setEvType("");
+    setEngineNumber("");
+    setChassisNumber("");
+    setSalesInvoiceUrl(null);
+    setOrFileUrl(null);
+    setCrFileUrl(null);
+  }
+
+  function startEditingProfile(profile: ApplicationProfile) {
+    const u = profile.units?.[0];
+    setEditingProfileId(profile.id);
+    setProfileName(profile.profile_name);
+    setFranchiseTypeCode(profile.franchise_type_code);
+    setSelectedRegionId(profile.region_id);
+    setSelectedProvinceId(profile.province_id ?? "");
+    setSelectedRouteId(profile.route_id ?? "");
+    setNotifyEmail(profile.notify_email ?? userEmail ?? "");
+    setArmImmediately(profile.is_armed);
+    setSubmitOnIncrease(profile.submit_on_slot_increase ?? true);
+    setSubmitAtMidnight(Boolean(profile.submit_at_midnight));
+    setSubmitHourly(Boolean(profile.submit_hourly));
+    setPlateNumber(u?.plate_number ?? "");
+    setMvFileNumber(u?.mv_file_number ?? "");
+    setMake(u?.make ?? "");
+    setSeries(u?.series ?? "");
+    setYearModel(String(u?.year_model ?? new Date().getFullYear()));
+    setBodyType(u?.body_type ?? "Sedan");
+    setEvType(u?.ev_type ?? "");
+    setEngineNumber(u?.engine_number ?? "");
+    setChassisNumber(u?.chassis_number ?? "");
+    setSalesInvoiceUrl(u?.documents?.sales_invoice_file ?? null);
+    setOrFileUrl(u?.documents?.or_file ?? null);
+    setCrFileUrl(u?.documents?.cr_file ?? null);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   async function uploadPdfFile(file: File): Promise<string> {
     const formData = new FormData();
@@ -289,10 +345,12 @@ export default function AutoReserveTab({
         cr_file: crFileUrl,
       };
 
+      const isEditing = Boolean(editingProfileId);
       const res = await fetch("/api/reservation/profiles", {
-        method: "POST",
+        method: isEditing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          ...(isEditing ? { id: editingProfileId } : {}),
           profile_name:
             profileName.trim() || `${franchiseTypeCode} — ${region.name}`,
           franchise_type_code: franchiseTypeCode,
@@ -331,14 +389,13 @@ export default function AutoReserveTab({
         throw new Error(json.error || "Could not save reservation details.");
       }
 
-      setProfileName("");
-      setSalesInvoiceUrl(null);
-      setOrFileUrl(null);
-      setCrFileUrl(null);
+      resetFormToNew();
       await onRefresh();
       onBanner({
         kind: "success",
-        text: armImmediately
+        text: isEditing
+          ? "Your reservation profile changes were saved."
+          : armImmediately
           ? "Saved! Automatic slot reservation is turned ON and ready."
           : "Saved! You can turn on automatic reservation anytime below.",
       });
@@ -428,14 +485,31 @@ export default function AutoReserveTab({
       )}
 
       {/* Application Form */}
-      <form onSubmit={handleSaveProfile} className="rounded-2xl bg-white p-6 sm:p-8">
-        <h2 id="reserve-heading" className="text-2xl font-bold text-[#17191C]">
-          Prepare Automatic Slot Reservation
-        </h2>
-        <p className="mt-2 text-lg leading-relaxed text-[#374151]">
-          Fill in your franchise area and vehicle details once. When our 15-minute check sees an
-          open slot, we will submit your application right away so you do not lose the slot.
-        </p>
+      <form ref={formRef} onSubmit={handleSaveProfile} className="rounded-2xl bg-white p-6 sm:p-8">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 id="reserve-heading" className="text-2xl font-bold text-[#17191C]">
+              {editingProfileId
+                ? "Edit Saved Reservation Profile"
+                : "Prepare Automatic Slot Reservation"}
+            </h2>
+            <p className="mt-2 text-lg leading-relaxed text-[#374151]">
+              {editingProfileId
+                ? "Update any details or documents below, then tap Save Profile Changes."
+                : "Fill in your franchise area and vehicle details once. When our 15-minute check sees an open slot, we will submit your application right away so you do not lose the slot."}
+            </p>
+          </div>
+
+          {editingProfileId && (
+            <button
+              type="button"
+              onClick={resetFormToNew}
+              className="min-h-12 shrink-0 rounded-xl bg-[#EEF1F4] px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+            >
+              Cancel Editing
+            </button>
+          )}
+        </div>
 
         <div className="mt-6 space-y-6">
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -852,8 +926,8 @@ export default function AutoReserveTab({
                     : "bg-white text-[#17191C] hover:bg-[#E2E6EB]"
                 }`}
               >
-                {submitAtMidnight ? "ON: " : "OFF: "}At 12:00 Midnight (Manila Time — 12:00 AM to
-                12:29 AM)
+                {submitAtMidnight ? "ON: " : "OFF: "}At 12:00 MN, 7:00 AM &amp; 8:00 AM (Manila
+                Time)
               </button>
 
               <button
@@ -891,17 +965,33 @@ export default function AutoReserveTab({
             </div>
           </div>
 
-          <button
-            type="submit"
-            disabled={
-              saving ||
-              allowedFranchiseTypes.length === 0 ||
-              (armImmediately && !submitOnIncrease && !submitAtMidnight && !submitHourly)
-            }
-            className="min-h-12 w-full rounded-xl bg-[#1D4ED8] px-6 py-4 text-lg font-bold text-white hover:bg-[#1E40AF] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-60 sm:w-auto"
-          >
-            {saving ? "Saving Details..." : "Save Reservation Profile"}
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="submit"
+              disabled={
+                saving ||
+                allowedFranchiseTypes.length === 0 ||
+                (armImmediately && !submitOnIncrease && !submitAtMidnight && !submitHourly)
+              }
+              className="min-h-12 w-full rounded-xl bg-[#1D4ED8] px-6 py-4 text-lg font-bold text-white hover:bg-[#1E40AF] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-60 sm:w-auto"
+            >
+              {saving
+                ? "Saving Details..."
+                : editingProfileId
+                ? "Save Profile Changes"
+                : "Save Reservation Profile"}
+            </button>
+
+            {editingProfileId && (
+              <button
+                type="button"
+                onClick={resetFormToNew}
+                className="min-h-12 w-full rounded-xl bg-[#EEF1F4] px-6 py-4 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30 sm:w-auto"
+              >
+                Cancel Editing
+              </button>
+            )}
+          </div>
         </div>
       </form>
 
@@ -998,7 +1088,7 @@ export default function AutoReserveTab({
                           <strong>
                             {[
                               (profile.submit_on_slot_increase ?? true) && "When slots increase",
-                              profile.submit_at_midnight && "12:00 Midnight (Manila)",
+                              profile.submit_at_midnight && "12:00 MN, 7:00 AM & 8:00 AM (Manila)",
                               profile.submit_hourly && "Once every hour",
                             ]
                               .filter(Boolean)
@@ -1049,6 +1139,14 @@ export default function AutoReserveTab({
                         className="min-h-12 rounded-xl bg-white px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
                       >
                         {profile.is_armed ? "Pause Auto-Reserve" : "Turn On Auto-Reserve"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => startEditingProfile(profile)}
+                        className="min-h-12 rounded-xl bg-white px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                      >
+                        Edit Details
                       </button>
 
                       {hasSavedLtfrbAccount && !docs?.or_file && (
