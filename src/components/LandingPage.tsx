@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import ScrollReveal from "@/components/ScrollReveal";
@@ -126,19 +127,29 @@ export default function LandingPage() {
         </div>
       </header>
 
-      {/* Hero Section (Official LTFRB Royal Blue Theme — Flat, High Contrast) */}
-      <section className="bg-[#102E7A] text-white">
-        <div className="mx-auto max-w-5xl px-5 py-16 sm:px-8 sm:py-24">
+      {/* Hero Section (Official LTFRB Royal Blue Theme — Flat Scrim + Background Graphic) */}
+      <section className="relative overflow-hidden bg-[#0B2248] text-white">
+        <Image
+          src="/images/hero-slot-radar.jpg"
+          alt=""
+          aria-hidden="true"
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover object-right md:object-center"
+        />
+        <div aria-hidden="true" className="absolute inset-0 bg-[#0B2248]/55" />
+        <div className="relative z-10 mx-auto max-w-5xl px-5 py-16 sm:px-8 sm:py-24">
           <ScrollReveal>
             <span className="inline-block rounded-xl bg-[#1447E6] px-4 py-2 text-base font-bold text-[#EFF6FF]">
               Automatic LTFRB Franchise Slot Assistant
             </span>
 
-            <h1 className="mt-6 max-w-3xl text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
+            <h1 className="mt-6 max-w-2xl text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
               Never Miss an Open LTFRB Franchise Slot Again
             </h1>
 
-            <p className="mt-6 max-w-3xl text-xl leading-relaxed text-[#EFF6FF]">
+            <p className="mt-6 max-w-2xl text-xl leading-relaxed text-[#EFF6FF]">
               Applying on <strong>ltfrb-foa.ph</strong> is hard when slots fill up in minutes.
               LTFRB Slot Helper checks available slots automatically every 15 minutes, emails you
               when a spot opens, and submits your prepared application for you.
