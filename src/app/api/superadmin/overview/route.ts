@@ -1,6 +1,8 @@
+import type { User } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import {
+  isAuthUserInProject,
   resolveUserEntitlements,
   type AdminAuditLogRow,
   type PaymentQrCodeRow,
@@ -11,6 +13,20 @@ import { requireSuperAdmin } from "@/lib/security/superadmin";
 import { getTenantContext } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
+
+async function listAllAuthUsers(
+  supabase: ReturnType<typeof getTenantContext>["supabase"]
+): Promise<User[]> {
+  const all: User[] = [];
+  const perPage = 1000;
+  for (let page = 1; page <= 10; page += 1) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage });
+    if (error || !data?.users?.length) break;
+    all.push(...data.users);
+    if (data.users.length < perPage) break;
+  }
+  return all;
+}
 
 export async function GET() {
   const guard = await requireSuperAdmin();
@@ -25,7 +41,7 @@ export async function GET() {
   const { supabase, websiteId } = getTenantContext();
 
   const [
-    authUsersRes,
+    allAuthUsers,
     subsRes,
     qrRes,
     paymentsRes,
@@ -33,10 +49,12 @@ export async function GET() {
     profilesRes,
     accountsRes,
     prefsRes,
+    notifUsersRes,
+    subLogsUsersRes,
     cronRes,
     auditRes,
   ] = await Promise.all([
-    supabase.auth.admin.listUsers({ page: 1, perPage: 1000 }),
+    listAllAuthUsers(supabase),
     supabase
       .from("ltfrb_subscriptions")
       .select("*")
@@ -71,6 +89,14 @@ export async function GET() {
       .select("user_id, monitored_franchise_codes")
       .eq("website_id", websiteId),
     supabase
+      .from("ltfrb_notification_logs")
+      .select("user_id")
+      .eq("website_id", websiteId),
+    supabase
+      .from("ltfrb_submission_logs")
+      .select("user_id")
+      .eq("website_id", websiteId),
+    supabase
       .from("ltfrb_cron_runs")
       .select("*")
       .eq("website_id", websiteId)
@@ -91,14 +117,27 @@ export async function GET() {
     });
   }
 
+  const projectUserIds = new Set<string>();
+  const addUserId = (uid: unknown) => {
+    if (typeof uid === "string" && uid.length > 0) {
+      projectUserIds.add(uid);
+    }
+  };
+
   const subByUser = new Map<string, SubscriptionRow>();
   for (const row of (subsRes.data as SubscriptionRow[] | null) ?? []) {
     subByUser.set(row.user_id, row);
+    addUserId(row.user_id);
+  }
+
+  for (const pay of paymentsRes.data ?? []) {
+    addUserId(pay.user_id);
   }
 
   const rulesCountByUser = new Map<string, number>();
   for (const r of rulesRes.data ?? []) {
     const uid = r.user_id as string;
+    addUserId(uid);
     rulesCountByUser.set(uid, (rulesCountByUser.get(uid) ?? 0) + 1);
   }
 
@@ -108,6 +147,7 @@ export async function GET() {
   >();
   for (const p of profilesRes.data ?? []) {
     const uid = p.user_id as string;
+    addUserId(uid);
     const prev = profileStatsByUser.get(uid) ?? {
       total: 0,
       submitting: 0,
@@ -123,6 +163,7 @@ export async function GET() {
 
   const ltfrbByUser = new Map<string, { email: string; type: string }>();
   for (const a of accountsRes.data ?? []) {
+    addUserId(a.user_id);
     ltfrbByUser.set(a.user_id as string, {
       email: a.ltfrb_email as string,
       type: a.account_type as string,
@@ -131,14 +172,25 @@ export async function GET() {
 
   const prefsByUser = new Map<string, string[]>();
   for (const pr of prefsRes.data ?? []) {
+    addUserId(pr.user_id);
     prefsByUser.set(
       pr.user_id as string,
       (pr.monitored_franchise_codes as string[] | undefined) ?? []
     );
   }
 
-  const authUsers = authUsersRes.data?.users ?? [];
-  const mergedUsers = authUsers.map((au) => {
+  for (const n of notifUsersRes.data ?? []) {
+    addUserId(n.user_id);
+  }
+  for (const s of subLogsUsersRes.data ?? []) {
+    addUserId(s.user_id);
+  }
+
+  const projectUsers = allAuthUsers.filter((au) =>
+    isAuthUserInProject({ user: au, websiteId, projectUserIds })
+  );
+
+  const mergedUsers = projectUsers.map((au) => {
     const sub = subByUser.get(au.id) ?? null;
     const profStats = profileStatsByUser.get(au.id) ?? {
       total: 0,

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ensureProjectUserRecord } from "@/lib/monitor/entitlements";
 import { createSupabaseAuthServerClient } from "@/lib/supabase/auth-server";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,8 @@ export async function POST(request: NextRequest) {
       { status: 401 }
     );
   }
+
+  await ensureProjectUserRecord(data.user.id, data.user.email ?? email);
 
   return NextResponse.json({
     ok: true,

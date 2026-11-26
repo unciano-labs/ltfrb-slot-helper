@@ -6,6 +6,7 @@ import {
   ANNUAL_PLAN_PRICE_PHP,
   calculatePaymentOrder,
   computeApprovedExpiryIso,
+  isAuthUserInProject,
   isSuperAdminEmail,
   resolveUserEntitlements,
   SUPERADMIN_EMAIL,
@@ -174,5 +175,56 @@ describe("SuperAdmin email and session cookie security", () => {
       false
     );
     assert.equal(verifySuperAdminSessionToken(`${token}tamper`, SUPERADMIN_EMAIL, now + 1000, secret), false);
+  });
+
+  it("excludes auth users from other projects in the shared Supabase instance", () => {
+    const projectWebsiteId = "site-ltfrb-123";
+    const otherWebsiteId = "site-other-999";
+    const projectUserIds = new Set(["user-with-row"]);
+
+    assert.equal(
+      isAuthUserInProject({
+        user: { id: "user-other-site", email: "stranger@other.com", user_metadata: { website_id: otherWebsiteId } },
+        websiteId: projectWebsiteId,
+        projectUserIds,
+      }),
+      false
+    );
+
+    assert.equal(
+      isAuthUserInProject({
+        user: { id: "user-no-metadata", email: "otherapp@other.com" },
+        websiteId: projectWebsiteId,
+        projectUserIds,
+      }),
+      false
+    );
+
+    assert.equal(
+      isAuthUserInProject({
+        user: { id: "user-with-row", email: "operator@example.com" },
+        websiteId: projectWebsiteId,
+        projectUserIds,
+      }),
+      true
+    );
+
+    assert.equal(
+      isAuthUserInProject({
+        user: { id: "new-signup", email: "new@example.com", user_metadata: { website_id: projectWebsiteId } },
+        websiteId: projectWebsiteId,
+        projectUserIds,
+      }),
+      true
+    );
+
+    assert.equal(
+      isAuthUserInProject({
+        user: { id: "admin-id", email: SUPERADMIN_EMAIL },
+        websiteId: projectWebsiteId,
+        projectUserIds,
+      }),
+      true
+    );
   });
 });

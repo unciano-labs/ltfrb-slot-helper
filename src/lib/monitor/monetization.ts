@@ -106,6 +106,38 @@ export function isSuperAdminEmail(email: string | null | undefined): boolean {
   return (email ?? "").trim().toLowerCase() === SUPERADMIN_EMAIL;
 }
 
+export function isAuthUserInProject(params: {
+  user: {
+    id: string;
+    email?: string | null;
+    user_metadata?: Record<string, unknown> | null;
+    app_metadata?: Record<string, unknown> | null;
+  };
+  websiteId: string;
+  projectUserIds: Set<string>;
+}): boolean {
+  const { user, websiteId, projectUserIds } = params;
+  if (projectUserIds.has(user.id)) return true;
+  if (isSuperAdminEmail(user.email)) return true;
+
+  const userMeta = user.user_metadata ?? {};
+  const appMeta = user.app_metadata ?? {};
+
+  if (userMeta.website_id === websiteId || appMeta.website_id === websiteId) {
+    return true;
+  }
+
+  if (Array.isArray(userMeta.website_ids) && userMeta.website_ids.includes(websiteId)) {
+    return true;
+  }
+
+  if (Array.isArray(appMeta.website_ids) && appMeta.website_ids.includes(websiteId)) {
+    return true;
+  }
+
+  return false;
+}
+
 export function calculatePaymentOrder(input: {
   includesAnnualPlan: boolean;
   extraProfiles: number;

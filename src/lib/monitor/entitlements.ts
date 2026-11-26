@@ -1,4 +1,6 @@
+import { isSupabaseConfigured } from "@/lib/env";
 import {
+  isSuperAdminEmail,
   resolveUserEntitlements,
   type PaymentQrCodeRow,
   type PaymentRequestRow,
@@ -6,6 +8,37 @@ import {
   type UserEntitlements,
 } from "@/lib/monitor/monetization";
 import { getTenantContext } from "@/lib/supabase/server";
+
+/**
+ * Records this authenticated user in `ltfrb_subscriptions` for the current `website_id`
+ * if no row exists yet, so multi-tenant SuperAdmin user lists stay scoped to this project.
+ */
+export async function ensureProjectUserRecord(
+  userId: string,
+  userEmail: string | null | undefined
+): Promise<void> {
+  if (!isSupabaseConfigured() || !userId) return;
+  try {
+    const { supabase, websiteId } = getTenantContext();
+    const isAdmin = isSuperAdminEmail(userEmail);
+    const now = new Date().toISOString();
+
+    await supabase.from("ltfrb_subscriptions").upsert(
+      {
+        website_id: websiteId,
+        user_id: userId,
+        user_email: (userEmail ?? "unknown@example.com").trim(),
+        plan_code: isAdmin ? "annual_1699" : "free",
+        status: isAdmin ? "active" : "unpaid",
+        created_at: now,
+        updated_at: now,
+      },
+      { onConflict: "website_id,user_id", ignoreDuplicates: true }
+    );
+  } catch {
+    // Gracefully skip if migration 004 has not been applied yet
+  }
+}
 
 function isMissingTableError(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false;
@@ -74,6 +107,9 @@ export async function loadUserBillingState(
 
   const schemaReady = !isMissingTableError(subRes.error);
   const sub = schemaReady ? ((subRes.data as SubscriptionRow | null) ?? null) : null;
+  if (schemaReady && !sub) {
+    void ensureProjectUserRecord(userId, userEmail);
+  }
   const qrCodes = !isMissingTableError(qrRes.error)
     ? ((qrRes.data as PaymentQrCodeRow[] | null) ?? [])
     : [];

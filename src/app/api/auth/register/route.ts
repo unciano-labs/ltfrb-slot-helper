@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getWebsiteId } from "@/lib/env";
+import { ensureProjectUserRecord } from "@/lib/monitor/entitlements";
 import { createSupabaseAuthServerClient } from "@/lib/supabase/auth-server";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +17,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const websiteId = getWebsiteId();
   const supabase = await createSupabaseAuthServerClient();
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        website_id: websiteId,
+        registered_project: "ltfrb-slot-helper",
+      },
+    },
+  });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  if (data.user?.id) {
+    await ensureProjectUserRecord(data.user.id, data.user.email ?? email);
   }
 
   if (!data.session) {
