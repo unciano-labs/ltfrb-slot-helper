@@ -459,28 +459,184 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
     }
   }
 
+  const activeSectionMeta: Record<ActiveTab, { title: string; subtitle: string }> = {
+    slots: {
+      title: "Live Slot Explorer",
+      subtitle: "Monitor LTFRB slot availability across regions and provinces every 15 minutes.",
+    },
+    alerts: {
+      title: "Email Alert Rules",
+      subtitle: "Configure automatic Gmail notifications when slots open, increase, or change.",
+    },
+    account: {
+      title: "LTFRB Portal Account",
+      subtitle: "Connect and verify your encrypted ltfrb-foa.ph login for automatic filing.",
+    },
+    reserve: {
+      title: "Auto-Reserve Application",
+      subtitle: "Prepare vehicle details and Sales Invoice PDFs for automatic slot submission.",
+    },
+  };
+
+  const armedProfilesCount = reservationProfiles.filter(
+    (p) => p.is_armed && p.lock_status !== "submitted"
+  ).length;
+
   return (
-    <div className="min-h-screen bg-[#F6F5F1] text-[#17191C]">
-      {/* Simple, Calm Header */}
-      <header className="bg-white">
-        <div className="mx-auto max-w-4xl px-5 py-6 sm:px-8 sm:py-8">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold tracking-tight text-[#17191C] sm:text-4xl">
-                LTFRB Slot Helper
-              </h1>
-              <p className="mt-2 text-lg leading-relaxed text-[#374151]">
-                Checks LTFRB franchise slots every 15 minutes, emails you, and reserves your spot.
-              </p>
+    <div className="min-h-screen bg-[#F4F4F5] text-[#0A0A0A]">
+      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:items-start lg:gap-8 lg:px-8 lg:py-8">
+        {/* Classic Left Navigation Sidebar */}
+        <aside className="w-full shrink-0 lg:sticky lg:top-8 lg:w-80">
+          <div className="rounded-2xl bg-white p-6">
+            {/* Brand Identity */}
+            <div className="flex items-center gap-3.5">
+              <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#102E7A] text-lg font-bold text-white">
+                LT
+              </span>
+              <div className="min-w-0">
+                <h1 className="truncate text-xl font-bold text-[#0A0A0A]">LTFRB Slot Helper</h1>
+                <p className="truncate text-base text-[#52525B]">
+                  {user?.email ?? "Operator Dashboard"}
+                </p>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            {/* Primary 4-Item Left Menu */}
+            <nav aria-label="Main Sections" className="mt-7">
+              <p className="mb-3 text-base font-bold uppercase tracking-wide text-[#52525B]">
+                Dashboard Menu
+              </p>
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("slots")}
+                  className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+                    activeTab === "slots"
+                      ? "bg-[#1447E6] text-white"
+                      : "bg-[#F4F4F5] text-[#18181B] hover:bg-[#E4E4E7]"
+                  }`}
+                >
+                  <span>1. Check Open Slots</span>
+                  <span
+                    className={`shrink-0 rounded-lg px-2.5 py-0.5 text-base font-bold ${
+                      activeTab === "slots"
+                        ? "bg-[#102E7A] text-white"
+                        : "bg-white text-[#18181B]"
+                    }`}
+                  >
+                    {openSlotsCount}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("alerts")}
+                  className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+                    activeTab === "alerts"
+                      ? "bg-[#1447E6] text-white"
+                      : "bg-[#F4F4F5] text-[#18181B] hover:bg-[#E4E4E7]"
+                  }`}
+                >
+                  <span>2. Email Alerts</span>
+                  <span
+                    className={`shrink-0 rounded-lg px-2.5 py-0.5 text-base font-bold ${
+                      activeTab === "alerts"
+                        ? "bg-[#102E7A] text-white"
+                        : "bg-white text-[#18181B]"
+                    }`}
+                  >
+                    {watchRules.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("account")}
+                  className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+                    activeTab === "account"
+                      ? "bg-[#1447E6] text-white"
+                      : "bg-[#F4F4F5] text-[#18181B] hover:bg-[#E4E4E7]"
+                  }`}
+                >
+                  <span>3. LTFRB Account</span>
+                  <span
+                    className={`shrink-0 rounded-lg px-2.5 py-0.5 text-base font-bold ${
+                      activeTab === "account"
+                        ? "bg-[#102E7A] text-white"
+                        : savedAccount
+                        ? "bg-[#DCFCE7] text-[#14532D]"
+                        : "bg-white text-[#52525B]"
+                    }`}
+                  >
+                    {savedAccount ? "Saved" : "Setup"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("reserve")}
+                  className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+                    activeTab === "reserve"
+                      ? "bg-[#1447E6] text-white"
+                      : "bg-[#F4F4F5] text-[#18181B] hover:bg-[#E4E4E7]"
+                  }`}
+                >
+                  <span>4. Auto-Reserve</span>
+                  <span
+                    className={`shrink-0 rounded-lg px-2.5 py-0.5 text-base font-bold ${
+                      activeTab === "reserve"
+                        ? "bg-[#102E7A] text-white"
+                        : "bg-white text-[#18181B]"
+                    }`}
+                  >
+                    {reservationProfiles.length}
+                  </span>
+                </button>
+              </div>
+            </nav>
+
+            {/* Sidebar Secondary Utilities */}
+            <div className="mt-7 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1">
               <Link
                 href="/"
-                className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-[#EEF1F4] px-5 py-3.5 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[#F4F4F5] px-4 py-3 text-lg font-bold text-[#18181B] hover:bg-[#E4E4E7] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
               >
-                Home
+                Public Landing Page
               </Link>
+
+              {user ? (
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  className="min-h-12 w-full rounded-xl bg-[#FEE2E2] px-4 py-3 text-lg font-bold text-[#7F1D1D] hover:bg-[#FECACA] focus:outline-none focus:ring-4 focus:ring-red-700/30"
+                >
+                  Sign Out
+                </button>
+              ) : (
+                <Link
+                  href="/login"
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-xl bg-[#102E7A] px-4 py-3 text-lg font-bold text-white hover:bg-[#0B225C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                >
+                  Sign In
+                </Link>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        {/* Right Workspace Column */}
+        <main className="min-w-0 flex-1 space-y-6">
+          {/* Top Workspace Header & Status Cards */}
+          <header className="rounded-2xl bg-white p-6 sm:p-8">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <h2 className="text-2xl font-bold tracking-tight text-[#0A0A0A] sm:text-3xl">
+                  {activeSectionMeta[activeTab].title}
+                </h2>
+                <p className="mt-1.5 text-lg leading-relaxed text-[#52525B]">
+                  {activeSectionMeta[activeTab].subtitle}
+                </p>
+              </div>
 
               <button
                 type="button"
@@ -490,129 +646,65 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
               >
                 {checkingNow ? "Checking LTFRB..." : "Check Slots Now"}
               </button>
-
-              {user ? (
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  className="min-h-12 shrink-0 rounded-xl bg-[#EEF1F4] px-5 py-3.5 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                >
-                  Sign Out
-                </button>
-              ) : (
-                <Link
-                  href="/login"
-                  className="inline-flex min-h-12 shrink-0 items-center justify-center rounded-xl bg-[#17191C] px-6 py-3.5 text-lg font-bold text-white hover:bg-[#2C3036] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                >
-                  Sign In
-                </Link>
-              )}
             </div>
-          </div>
 
-          {/* Plain-English Status Summary */}
-          <div className="mt-6 rounded-xl bg-[#EEF1F4] px-5 py-4 text-base sm:text-lg">
-            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-6">
-              <span>
-                <strong>Last Checked:</strong>{" "}
-                {formatManilaTime(lastRun?.finished_at ?? lastRun?.started_at ?? fetchedAt)}
-              </span>
-              <span>
-                <strong>Open Now:</strong> {openSlotsCount} of {activeSlots.length}{" "}
-                {viewScope === "region" ? "regional" : "provincial"} entries
-              </span>
-              <span>
-                <strong>Your Status:</strong>{" "}
-                {user ? `Signed in as ${user.email}` : "Viewing Public Slots (Not Signed In)"}
-              </span>
+            {/* Clean 3-Card Summary Row */}
+            <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+              <div className="rounded-xl bg-[#F4F4F5] p-4 sm:p-5">
+                <p className="text-base font-bold text-[#52525B]">Last Checked</p>
+                <p className="mt-1 text-lg font-bold text-[#0A0A0A]">
+                  {formatManilaTime(lastRun?.finished_at ?? lastRun?.started_at ?? fetchedAt)}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-[#EFF6FF] p-4 sm:p-5">
+                <p className="text-base font-bold text-[#1E3A8A]">Open Slots Now</p>
+                <p className="mt-1 text-lg font-bold text-[#102E7A]">
+                  {openSlotsCount} of {activeSlots.length}{" "}
+                  {viewScope === "region" ? "regional" : "provincial"}
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-[#F4F4F5] p-4 sm:p-5">
+                <p className="text-base font-bold text-[#52525B]">Active Automation</p>
+                <p className="mt-1 text-lg font-bold text-[#0A0A0A]">
+                  {watchRules.length} Alert{watchRules.length === 1 ? "" : "s"} •{" "}
+                  {armedProfilesCount} Armed
+                </p>
+              </div>
             </div>
-          </div>
+          </header>
 
-          {/* Simple 4-Button Navigation */}
-          <nav
-            aria-label="Main Sections"
-            className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2"
-          >
-            <button
-              type="button"
-              onClick={() => setActiveTab("slots")}
-              className={`min-h-12 rounded-xl px-5 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
-                activeTab === "slots"
-                  ? "bg-[#17191C] text-white"
-                  : "bg-[#EEF1F4] text-[#17191C] hover:bg-[#E2E6EB]"
-              }`}
-            >
-              1. Check Open Slots
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("alerts")}
-              className={`min-h-12 rounded-xl px-5 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
-                activeTab === "alerts"
-                  ? "bg-[#17191C] text-white"
-                  : "bg-[#EEF1F4] text-[#17191C] hover:bg-[#E2E6EB]"
-              }`}
-            >
-              2. My Email Alerts {user ? `(${watchRules.length})` : "(Sign In)"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("account")}
-              className={`min-h-12 rounded-xl px-5 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
-                activeTab === "account"
-                  ? "bg-[#17191C] text-white"
-                  : "bg-[#EEF1F4] text-[#17191C] hover:bg-[#E2E6EB]"
-              }`}
-            >
-              3. My LTFRB Account {savedAccount ? "(Saved)" : user ? "" : "(Sign In)"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("reserve")}
-              className={`min-h-12 rounded-xl px-5 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
-                activeTab === "reserve"
-                  ? "bg-[#17191C] text-white"
-                  : "bg-[#EEF1F4] text-[#17191C] hover:bg-[#E2E6EB]"
-              }`}
-            >
-              4. Auto-Reserve Slot {user ? `(${reservationProfiles.length})` : "(Sign In)"}
-            </button>
-          </nav>
-        </div>
-      </header>
+          {user && (
+            <FranchisePickerCard
+              franchiseTypes={franchiseTypes}
+              savedCodes={monitoredFranchiseCodes}
+              onSaved={async (codes) => {
+                setMonitoredFranchiseCodes(codes);
+                if (codes.length > 0 && !codes.includes(ruleFranchiseCode)) {
+                  setRuleFranchiseCode(codes[0]);
+                }
+                setSelectedFranchiseCode("ALL");
+                await loadData();
+              }}
+              onBanner={setBanner}
+            />
+          )}
 
-      {/* Main Content */}
-      <main className="mx-auto max-w-4xl px-5 py-8 sm:px-8">
-        {user && (
-          <FranchisePickerCard
-            franchiseTypes={franchiseTypes}
-            savedCodes={monitoredFranchiseCodes}
-            onSaved={async (codes) => {
-              setMonitoredFranchiseCodes(codes);
-              if (codes.length > 0 && !codes.includes(ruleFranchiseCode)) {
-                setRuleFranchiseCode(codes[0]);
-              }
-              setSelectedFranchiseCode("ALL");
-              await loadData();
-            }}
-            onBanner={setBanner}
-          />
-        )}
-
-        {banner && (
-          <div
-            role="status"
-            className={`mb-8 rounded-2xl p-6 text-lg leading-relaxed ${
-              banner.kind === "success"
-                ? "bg-[#DCFCE7] text-[#14532D]"
-                : banner.kind === "error"
-                ? "bg-[#FEE2E2] text-[#7F1D1D]"
-                : "bg-[#DBEAFE] text-[#1E3A8A]"
-            }`}
-          >
-            <p className="font-bold">{banner.text}</p>
-          </div>
-        )}
+          {banner && (
+            <div
+              role="status"
+              className={`rounded-2xl p-6 text-lg leading-relaxed ${
+                banner.kind === "success"
+                  ? "bg-[#DCFCE7] text-[#14532D]"
+                  : banner.kind === "error"
+                  ? "bg-[#FEE2E2] text-[#7F1D1D]"
+                  : "bg-[#DBEAFE] text-[#1E3A8A]"
+              }`}
+            >
+              <p className="font-bold">{banner.text}</p>
+            </div>
+          )}
 
         {/* TAB 1: LIVE SLOTS */}
         {activeTab === "slots" && (
@@ -1243,6 +1335,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
             />
           ))}
       </main>
+      </div>
     </div>
   );
 }
