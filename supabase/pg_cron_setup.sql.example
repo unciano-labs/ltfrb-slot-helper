@@ -1,0 +1,28 @@
+-- ============================================================================
+-- Optional: Exact 15-Minute Scheduler via Supabase pg_cron + pg_net (Free)
+-- Recommended for Vercel Hobby accounts instead of GitHub Actions delays.
+--
+-- Prerequisites in Supabase Dashboard:
+--   1. Go to Database -> Extensions and enable `pg_cron` and `pg_net`.
+--   2. Replace `REPLACE_WITH_CRON_SECRET` below with your CRON_SECRET value.
+--   3. Run this in the Supabase SQL Editor.
+-- ============================================================================
+
+select cron.unschedule('ltfrb-15min-slot-check')
+where exists (
+  select 1 from cron.job where jobname = 'ltfrb-15min-slot-check'
+);
+
+select cron.schedule(
+  'ltfrb-15min-slot-check',
+  '*/15 * * * *',
+  $$
+  select net.http_post(
+    url := 'https://ltfrb-slot-helper.vercel.app/api/cron/check-slots',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer REPLACE_WITH_CRON_SECRET',
+      'Accept', 'application/json'
+    )
+  );
+  $$
+);
