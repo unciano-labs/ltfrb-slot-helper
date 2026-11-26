@@ -1,0 +1,17 @@
+name: LTFRB 15-Minute Slot Check
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  trigger-slot-check:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.APP_URL != '' && secrets.CRON_SECRET != '' }}
+    steps:
+      - name: Call Vercel slot monitor endpoint
+        run: |
+          curl -fsS -X POST "${{ secrets.APP_URL }}/api/cron/check-slots" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Accept: application/json"
