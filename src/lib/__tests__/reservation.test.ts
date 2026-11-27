@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { describe, it } from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { validateApplicationUnits } from "@/lib/ltfrb/client";
 import { attemptSlotReservation, type ReservationDeps } from "@/lib/ltfrb/reservation";
 import type { ApplicationProfile } from "@/lib/ltfrb/types";
 import { decryptSecret, encryptSecret } from "@/lib/security/crypto";
@@ -338,5 +339,65 @@ describe("atomic slot reservation lock and outcomes", () => {
       assert.equal(state.profile.submit_hourly, false);
       assert.match(outcome.message, new RegExp(`HTTP ${status}`));
     }
+  });
+
+  it("submits Fleet applications with is_fleet=true, number_of_units, and all vehicle units", async () => {
+    const state = baseState();
+    state.profile.is_fleet = true;
+    state.profile.number_of_units = 2;
+    state.profile.units = [
+      {
+        ...state.profile.units[0],
+        plate_number: "ABC1111",
+      },
+      {
+        ...state.profile.units[0],
+        plate_number: "XYZ2222",
+        mv_file_number: "1301-999999",
+        engine_number: "ENG-2",
+        chassis_number: "CHS-2",
+        documents: {
+          sales_invoice_file: "https://cdn.example.com/si-2.pdf",
+        },
+      },
+    ];
+
+    let capturedIsFleet = false;
+    let capturedCount = 0;
+    let capturedPlates: string[] = [];
+
+    const deps = makeDeps(state, {
+      submitApplication: async (_token, payload) => {
+        capturedIsFleet = payload.is_fleet;
+        capturedCount = payload.number_of_units;
+        capturedPlates = payload.units.map((u) => u.plate_number);
+        return {
+          httpStatus: 201,
+          result: "success",
+          message: "Fleet submitted",
+          referenceNumber: "CASE-FLEET-2026",
+          rawResponse: {},
+        };
+      },
+    });
+
+    const outcome = await attemptSlotReservation(
+      { profileId: "prof-1", userId: "user-1" },
+      deps
+    );
+
+    assert.equal(outcome.result, "success");
+    assert.equal(capturedIsFleet, true);
+    assert.equal(capturedCount, 2);
+    assert.deepEqual(capturedPlates, ["ABC1111", "XYZ2222"]);
+
+    const badFleetCount = validateApplicationUnits({
+      franchiseTypeCode: "TNVS",
+      isFleet: true,
+      numberOfUnits: 1,
+      units: [state.profile.units[0]],
+      requireDocuments: true,
+    });
+    assert.equal(badFleetCount.valid, false);
   });
 });

@@ -7,6 +7,7 @@ import type {
   LtfrbOptionItem,
   SubmissionLogRow,
   UnitDocuments,
+  VehicleUnitInput,
 } from "@/lib/ltfrb/types";
 
 interface AutoReserveTabProps {
@@ -19,6 +20,55 @@ interface AutoReserveTabProps {
   onGoToAccountTab: () => void;
   onRefresh: () => Promise<void>;
   onBanner: (banner: { kind: "success" | "error" | "info"; text: string }) => void;
+}
+
+interface UnitDraft {
+  plate_number: string;
+  mv_file_number: string;
+  make: string;
+  series: string;
+  year_model: string;
+  body_type: string;
+  ev_type: "" | "BEV" | "PHEV" | "HEV";
+  engine_number: string;
+  chassis_number: string;
+  sales_invoice_file: string | null;
+  or_file: string | null;
+  cr_file: string | null;
+}
+
+function createEmptyUnitDraft(requiresEvType: boolean): UnitDraft {
+  return {
+    plate_number: "",
+    mv_file_number: "",
+    make: "",
+    series: "",
+    year_model: String(new Date().getFullYear()),
+    body_type: "Sedan",
+    ev_type: requiresEvType ? "BEV" : "",
+    engine_number: "",
+    chassis_number: "",
+    sales_invoice_file: null,
+    or_file: null,
+    cr_file: null,
+  };
+}
+
+function unitInputToDraft(u: VehicleUnitInput, requiresEvType: boolean): UnitDraft {
+  return {
+    plate_number: u.plate_number ?? "",
+    mv_file_number: u.mv_file_number ?? "",
+    make: u.make ?? "",
+    series: u.series ?? "",
+    year_model: String(u.year_model ?? new Date().getFullYear()),
+    body_type: u.body_type ?? "Sedan",
+    ev_type: u.ev_type ?? (requiresEvType ? "BEV" : ""),
+    engine_number: u.engine_number ?? "",
+    chassis_number: u.chassis_number ?? "",
+    sales_invoice_file: u.documents?.sales_invoice_file ?? null,
+    or_file: u.documents?.or_file ?? null,
+    cr_file: u.documents?.cr_file ?? null,
+  };
 }
 
 function formatManilaTime(iso: string | null | undefined): string {
@@ -55,6 +105,7 @@ export default function AutoReserveTab({
   const [franchiseTypeCode, setFranchiseTypeCode] = useState(
     monitoredFranchiseCodes[0] ?? ""
   );
+  const [isFleet, setIsFleet] = useState(false);
   const [selectedRegionId, setSelectedRegionId] = useState("");
   const [selectedProvinceId, setSelectedProvinceId] = useState("");
   const [selectedRouteId, setSelectedRouteId] = useState("");
@@ -64,21 +115,12 @@ export default function AutoReserveTab({
   const [submitAtMidnight, setSubmitAtMidnight] = useState(false);
   const [submitHourly, setSubmitHourly] = useState(false);
 
-  // Single vehicle unit details
-  const [plateNumber, setPlateNumber] = useState("");
-  const [mvFileNumber, setMvFileNumber] = useState("");
-  const [make, setMake] = useState("");
-  const [series, setSeries] = useState("");
-  const [yearModel, setYearModel] = useState(String(new Date().getFullYear()));
-  const [bodyType, setBodyType] = useState("Sedan");
-  const [evType, setEvType] = useState<"" | "BEV" | "PHEV" | "HEV">("");
-  const [engineNumber, setEngineNumber] = useState("");
-  const [chassisNumber, setChassisNumber] = useState("");
+  const requiresEvType = franchiseTypeCode === "E_TNVS" || franchiseTypeCode === "EVT";
+  const selectedFranchiseMeta = franchiseTypes.find((ft) => ft.code === franchiseTypeCode) ?? null;
 
-  // Unit documents (Sales Invoice now; OR & CR optional until available)
-  const [salesInvoiceUrl, setSalesInvoiceUrl] = useState<string | null>(null);
-  const [orFileUrl, setOrFileUrl] = useState<string | null>(null);
-  const [crFileUrl, setCrFileUrl] = useState<string | null>(null);
+  const [unitsDraft, setUnitsDraft] = useState<UnitDraft[]>(() => [
+    createEmptyUnitDraft(requiresEvType),
+  ]);
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
@@ -86,10 +128,48 @@ export default function AutoReserveTab({
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
+  function resizeUnitsCount(nextCount: number) {
+    const clamped = Math.max(1, Math.min(50, Math.floor(nextCount)));
+    setUnitsDraft((prev) => {
+      if (prev.length === clamped) return prev;
+      if (prev.length > clamped) return prev.slice(0, clamped);
+      const next = [...prev];
+      while (next.length < clamped) {
+        next.push(createEmptyUnitDraft(requiresEvType));
+      }
+      return next;
+    });
+  }
+
+  function handleSelectApplicationType(fleetMode: boolean) {
+    setIsFleet(fleetMode);
+    if (fleetMode) {
+      const fleetMin = Math.max(2, selectedFranchiseMeta?.fleetMinSlots ?? 2);
+      if (unitsDraft.length < fleetMin) {
+        resizeUnitsCount(fleetMin);
+      }
+    } else if (unitsDraft.length > 1) {
+      resizeUnitsCount(1);
+    }
+  }
+
+  function updateUnitField<K extends keyof UnitDraft>(
+    unitIndex: number,
+    field: K,
+    value: UnitDraft[K]
+  ) {
+    setUnitsDraft((prev) =>
+      prev.map((unit, idx) => (idx === unitIndex ? { ...unit, [field]: value } : unit))
+    );
+  }
+
   function resetFormToNew() {
+    const initialCode = monitoredFranchiseCodes[0] ?? "";
+    const initialEv = initialCode === "E_TNVS" || initialCode === "EVT";
     setEditingProfileId(null);
     setProfileName("");
-    setFranchiseTypeCode(monitoredFranchiseCodes[0] ?? "");
+    setFranchiseTypeCode(initialCode);
+    setIsFleet(false);
     setSelectedRegionId("");
     setSelectedProvinceId("");
     setSelectedRouteId("");
@@ -98,25 +178,21 @@ export default function AutoReserveTab({
     setSubmitOnIncrease(true);
     setSubmitAtMidnight(false);
     setSubmitHourly(false);
-    setPlateNumber("");
-    setMvFileNumber("");
-    setMake("");
-    setSeries("");
-    setYearModel(String(new Date().getFullYear()));
-    setBodyType("Sedan");
-    setEvType("");
-    setEngineNumber("");
-    setChassisNumber("");
-    setSalesInvoiceUrl(null);
-    setOrFileUrl(null);
-    setCrFileUrl(null);
+    setUnitsDraft([createEmptyUnitDraft(initialEv)]);
   }
 
   function startEditingProfile(profile: ApplicationProfile) {
-    const u = profile.units?.[0];
+    const profileEv =
+      profile.franchise_type_code === "E_TNVS" || profile.franchise_type_code === "EVT";
+    const loadedUnits =
+      profile.units && profile.units.length > 0
+        ? profile.units.map((u) => unitInputToDraft(u, profileEv))
+        : [createEmptyUnitDraft(profileEv)];
+
     setEditingProfileId(profile.id);
     setProfileName(profile.profile_name);
     setFranchiseTypeCode(profile.franchise_type_code);
+    setIsFleet(Boolean(profile.is_fleet));
     setSelectedRegionId(profile.region_id);
     setSelectedProvinceId(profile.province_id ?? "");
     setSelectedRouteId(profile.route_id ?? "");
@@ -125,18 +201,7 @@ export default function AutoReserveTab({
     setSubmitOnIncrease(profile.submit_on_slot_increase ?? true);
     setSubmitAtMidnight(Boolean(profile.submit_at_midnight));
     setSubmitHourly(Boolean(profile.submit_hourly));
-    setPlateNumber(u?.plate_number ?? "");
-    setMvFileNumber(u?.mv_file_number ?? "");
-    setMake(u?.make ?? "");
-    setSeries(u?.series ?? "");
-    setYearModel(String(u?.year_model ?? new Date().getFullYear()));
-    setBodyType(u?.body_type ?? "Sedan");
-    setEvType(u?.ev_type ?? "");
-    setEngineNumber(u?.engine_number ?? "");
-    setChassisNumber(u?.chassis_number ?? "");
-    setSalesInvoiceUrl(u?.documents?.sales_invoice_file ?? null);
-    setOrFileUrl(u?.documents?.or_file ?? null);
-    setCrFileUrl(u?.documents?.cr_file ?? null);
+    setUnitsDraft(loadedUnits);
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -155,19 +220,18 @@ export default function AutoReserveTab({
   }
 
   async function handleFormFileChange(
-    docKey: "sales_invoice" | "or" | "cr",
+    unitIndex: number,
+    docKey: "sales_invoice_file" | "or_file" | "cr_file",
     file: File | undefined
   ) {
     if (!file) return;
-    setUploadingKey(docKey);
+    setUploadingKey(`form:${unitIndex}:${docKey}`);
     try {
       const url = await uploadPdfFile(file);
-      if (docKey === "sales_invoice") setSalesInvoiceUrl(url);
-      if (docKey === "or") setOrFileUrl(url);
-      if (docKey === "cr") setCrFileUrl(url);
+      updateUnitField(unitIndex, docKey, url);
       onBanner({
         kind: "success",
-        text: "PDF uploaded and ready for your application.",
+        text: `Unit ${unitIndex + 1} PDF uploaded and ready for your application.`,
       });
     } catch (err) {
       onBanner({
@@ -223,8 +287,6 @@ export default function AutoReserveTab({
     }
   }
 
-  const requiresEvType = franchiseTypeCode === "E_TNVS" || franchiseTypeCode === "EVT";
-
   useEffect(() => {
     if (
       monitoredFranchiseCodes.length > 0 &&
@@ -235,25 +297,26 @@ export default function AutoReserveTab({
   }, [franchiseTypeCode, monitoredFranchiseCodes]);
 
   useEffect(() => {
-    if (requiresEvType && !evType) {
-      setEvType("BEV");
+    if (requiresEvType) {
+      setUnitsDraft((prev) =>
+        prev.map((u) => (u.ev_type ? u : { ...u, ev_type: "BEV" }))
+      );
     }
-  }, [evType, requiresEvType]);
+  }, [requiresEvType]);
 
   async function handleUpdateSavedEvType(
     profile: ApplicationProfile,
     nextEvType: "BEV" | "PHEV" | "HEV"
   ) {
-    const currentUnits = [...(profile.units ?? [])];
-    currentUnits[0] = {
-      ...(currentUnits[0] ?? {}),
-      ev_type: nextEvType,
-    };
+    const updatedUnits = (profile.units ?? []).map((u) => ({
+      ...u,
+      ev_type: u.ev_type || nextEvType,
+    }));
 
     const res = await fetch("/api/reservation/profiles", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: profile.id, units: currentUnits }),
+      body: JSON.stringify({ id: profile.id, units: updatedUnits }),
     });
 
     if (res.ok) {
@@ -339,11 +402,25 @@ export default function AutoReserveTab({
         throw new Error("Please select a Region first.");
       }
 
-      const documents: UnitDocuments = {
-        sales_invoice_file: salesInvoiceUrl,
-        or_file: orFileUrl,
-        cr_file: crFileUrl,
-      };
+      const serializedUnits: VehicleUnitInput[] = unitsDraft.map((u) => {
+        const documents: UnitDocuments = {
+          sales_invoice_file: u.sales_invoice_file,
+          or_file: u.or_file,
+          cr_file: u.cr_file,
+        };
+        return {
+          plate_number: u.plate_number.trim().toUpperCase(),
+          mv_file_number: u.mv_file_number.trim(),
+          make: u.make.trim(),
+          series: u.series.trim(),
+          year_model: Number(u.year_model) || new Date().getFullYear(),
+          body_type: u.body_type.trim() || "Sedan",
+          ...(u.ev_type ? { ev_type: u.ev_type } : {}),
+          engine_number: u.engine_number.trim(),
+          chassis_number: u.chassis_number.trim(),
+          documents,
+        };
+      });
 
       const isEditing = Boolean(editingProfileId);
       const res = await fetch("/api/reservation/profiles", {
@@ -352,7 +429,8 @@ export default function AutoReserveTab({
         body: JSON.stringify({
           ...(isEditing ? { id: editingProfileId } : {}),
           profile_name:
-            profileName.trim() || `${franchiseTypeCode} — ${region.name}`,
+            profileName.trim() ||
+            `${franchiseTypeCode} (${isFleet ? `Fleet ${serializedUnits.length}` : "Individual"}) — ${region.name}`,
           franchise_type_code: franchiseTypeCode,
           region_id: region.id,
           region_name: region.name,
@@ -360,27 +438,14 @@ export default function AutoReserveTab({
           province_name: province?.name ?? null,
           route_id: route?.id ?? null,
           route_name: route?.name ?? null,
-          number_of_units: 1,
-          is_fleet: false,
+          number_of_units: serializedUnits.length,
+          is_fleet: isFleet,
           notify_email: notifyEmail.trim() || userEmail,
           is_armed: armImmediately,
           submit_on_slot_increase: submitOnIncrease,
           submit_at_midnight: submitAtMidnight,
           submit_hourly: submitHourly,
-          units: [
-            {
-              plate_number: plateNumber.trim().toUpperCase(),
-              mv_file_number: mvFileNumber.trim(),
-              make: make.trim(),
-              series: series.trim(),
-              year_model: Number(yearModel) || new Date().getFullYear(),
-              body_type: bodyType.trim() || "Sedan",
-              ...(evType ? { ev_type: evType } : {}),
-              engine_number: engineNumber.trim(),
-              chassis_number: chassisNumber.trim(),
-              documents,
-            },
-          ],
+          units: serializedUnits,
         }),
       });
 
@@ -418,7 +483,11 @@ export default function AutoReserveTab({
     if (res.ok) {
       await onRefresh();
     } else {
-      onBanner({ kind: "error", text: "Could not update automatic reservation setting." });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      onBanner({
+        kind: "error",
+        text: json.error || "Could not update automatic reservation setting.",
+      });
     }
   }
 
@@ -465,6 +534,9 @@ export default function AutoReserveTab({
     }
   }
 
+  const minUnitsAllowed = isFleet ? Math.max(2, selectedFranchiseMeta?.fleetMinSlots ?? 2) : 1;
+  const maxUnitsAllowed = selectedFranchiseMeta?.maxSlots ?? 50;
+
   return (
     <section aria-labelledby="reserve-heading" className="space-y-8">
       {!hasSavedLtfrbAccount && (
@@ -496,7 +568,7 @@ export default function AutoReserveTab({
             <p className="mt-2 text-lg leading-relaxed text-[#374151]">
               {editingProfileId
                 ? "Update any details or documents below, then tap Save Profile Changes."
-                : "Fill in your franchise area and vehicle details once. When our 15-minute check sees an open slot, we will submit your application right away so you do not lose the slot."}
+                : "Fill in your LTFRB application type, authorized units, franchise area, and vehicle details once. We submit automatically when matching open slots appear."}
             </p>
           </div>
 
@@ -515,7 +587,7 @@ export default function AutoReserveTab({
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div>
               <label htmlFor="res-name" className="block text-lg font-bold text-[#17191C]">
-                Nickname for This Vehicle / Application
+                Nickname for This Application
               </label>
               <input
                 id="res-name"
@@ -544,7 +616,7 @@ export default function AutoReserveTab({
                 className="mt-2 min-h-12 w-full rounded-xl bg-[#EEF1F4] px-4 py-3 text-lg text-[#17191C] focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-700/30"
               >
                 {allowedFranchiseTypes.length === 0 ? (
-                  <option value="">Pick 1 or 2 franchises above first</option>
+                  <option value="">Pick your monitored franchise in Check Open Slots first</option>
                 ) : (
                   allowedFranchiseTypes.map((ft) => (
                     <option key={ft.code} value={ft.code}>
@@ -553,6 +625,87 @@ export default function AutoReserveTab({
                   ))
                 )}
               </select>
+            </div>
+          </div>
+
+          {/* Application Type (Individual vs Fleet) + No. of Authorized Units */}
+          <div className="rounded-xl bg-[#F6F5F1] p-5 sm:p-6">
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <div>
+                <p className="text-lg font-bold text-[#17191C]">
+                  Application Type (Individual or Fleet)
+                </p>
+                <p className="mt-1 text-base text-[#4B5563]">
+                  Matches the LTFRB portal Application Type field (`is_fleet`).
+                </p>
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    aria-pressed={!isFleet}
+                    onClick={() => handleSelectApplicationType(false)}
+                    className={`min-h-12 rounded-xl px-5 py-3 text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+                      !isFleet
+                        ? "bg-[#1D4ED8] text-white"
+                        : "bg-white text-[#17191C] hover:bg-[#E2E6EB]"
+                    }`}
+                  >
+                    Individual
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={isFleet}
+                    onClick={() => handleSelectApplicationType(true)}
+                    className={`min-h-12 rounded-xl px-5 py-3 text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+                      isFleet
+                        ? "bg-[#1D4ED8] text-white"
+                        : "bg-white text-[#17191C] hover:bg-[#E2E6EB]"
+                    }`}
+                  >
+                    Fleet
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="res-units-count" className="block text-lg font-bold text-[#17191C]">
+                  No. of Authorized Units
+                </label>
+                <p className="mt-1 text-base text-[#4B5563]">
+                  {isFleet
+                    ? `Minimum ${minUnitsAllowed} units for Fleet. Requires ${unitsDraft.length}+ open slots at once.`
+                    : "Usually 1 unit for Individual operator applications."}
+                </p>
+                <div className="mt-3 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => resizeUnitsCount(Math.max(minUnitsAllowed, unitsDraft.length - 1))}
+                    disabled={unitsDraft.length <= minUnitsAllowed}
+                    className="min-h-12 min-w-12 rounded-xl bg-white px-4 py-2 text-xl font-bold text-[#17191C] hover:bg-[#E2E6EB] disabled:opacity-50"
+                  >
+                    -
+                  </button>
+                  <input
+                    id="res-units-count"
+                    type="number"
+                    min={minUnitsAllowed}
+                    max={maxUnitsAllowed}
+                    value={unitsDraft.length}
+                    onChange={(e) => {
+                      const val = Number(e.target.value) || minUnitsAllowed;
+                      resizeUnitsCount(Math.max(minUnitsAllowed, Math.min(maxUnitsAllowed, val)));
+                    }}
+                    className="min-h-12 w-24 rounded-xl bg-white px-3 py-2 text-center text-xl font-bold text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => resizeUnitsCount(Math.min(maxUnitsAllowed, unitsDraft.length + 1))}
+                    disabled={unitsDraft.length >= maxUnitsAllowed}
+                    className="min-h-12 min-w-12 rounded-xl bg-[#1D4ED8] px-4 py-2 text-xl font-bold text-white hover:bg-[#1E40AF] disabled:opacity-50"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -624,256 +777,291 @@ export default function AutoReserveTab({
             </div>
           )}
 
-          {/* Vehicle Details */}
-          <div className="rounded-xl bg-[#F6F5F1] p-5 sm:p-6">
-            <h3 className="text-xl font-bold text-[#17191C]">Vehicle Details</h3>
-            <p className="mt-1 text-base text-[#4B5563]">
-              Copy these exactly from your vehicle OR/CR registration paper.
-            </p>
+          {/* Vehicle Details & Per-Unit Documents */}
+          <div className="space-y-6">
+            {unitsDraft.map((unit, idx) => (
+              <div key={idx} className="space-y-6 rounded-xl bg-[#F6F5F1] p-5 sm:p-6">
+                <div>
+                  <h3 className="text-xl font-bold text-[#17191C]">
+                    {unitsDraft.length > 1
+                      ? `Vehicle Unit ${idx + 1} of ${unitsDraft.length}`
+                      : "Vehicle Details"}
+                  </h3>
+                  <p className="mt-1 text-base text-[#4B5563]">
+                    Copy these exactly from your vehicle OR/CR registration or Sales Invoice.
+                  </p>
+                </div>
 
-            <div className="mt-5 grid grid-cols-1 gap-5 md:grid-cols-2">
-              <div>
-                <label htmlFor="veh-plate" className="block text-lg font-bold text-[#17191C]">
-                  Plate Number
-                </label>
-                <input
-                  id="veh-plate"
-                  type="text"
-                  required
-                  value={plateNumber}
-                  onChange={(e) => setPlateNumber(e.target.value)}
-                  placeholder="ABC1234"
-                  className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg uppercase text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                />
-              </div>
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor={`veh-plate-${idx}`}
+                      className="block text-lg font-bold text-[#17191C]"
+                    >
+                      Plate Number
+                    </label>
+                    <input
+                      id={`veh-plate-${idx}`}
+                      type="text"
+                      required
+                      value={unit.plate_number}
+                      onChange={(e) => updateUnitField(idx, "plate_number", e.target.value)}
+                      placeholder="ABC1234"
+                      className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg uppercase text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    />
+                  </div>
 
-              <div>
-                <label htmlFor="veh-mv" className="block text-lg font-bold text-[#17191C]">
-                  MV File Number
-                </label>
-                <input
-                  id="veh-mv"
-                  type="text"
-                  required
-                  value={mvFileNumber}
-                  onChange={(e) => setMvFileNumber(e.target.value)}
-                  placeholder="1301-0000123456"
-                  className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                />
-              </div>
+                  <div>
+                    <label
+                      htmlFor={`veh-mv-${idx}`}
+                      className="block text-lg font-bold text-[#17191C]"
+                    >
+                      MV File Number
+                    </label>
+                    <input
+                      id={`veh-mv-${idx}`}
+                      type="text"
+                      required
+                      value={unit.mv_file_number}
+                      onChange={(e) => updateUnitField(idx, "mv_file_number", e.target.value)}
+                      placeholder="1301-0000123456"
+                      className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    />
+                  </div>
 
-              <div>
-                <label htmlFor="veh-make" className="block text-lg font-bold text-[#17191C]">
-                  Vehicle Make (Brand)
-                </label>
-                <input
-                  id="veh-make"
-                  type="text"
-                  required
-                  value={make}
-                  onChange={(e) => setMake(e.target.value)}
-                  placeholder="Toyota"
-                  className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                />
-              </div>
+                  <div>
+                    <label
+                      htmlFor={`veh-make-${idx}`}
+                      className="block text-lg font-bold text-[#17191C]"
+                    >
+                      Vehicle Make (Brand)
+                    </label>
+                    <input
+                      id={`veh-make-${idx}`}
+                      type="text"
+                      required
+                      value={unit.make}
+                      onChange={(e) => updateUnitField(idx, "make", e.target.value)}
+                      placeholder="Toyota"
+                      className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    />
+                  </div>
 
-              <div>
-                <label htmlFor="veh-series" className="block text-lg font-bold text-[#17191C]">
-                  Vehicle Model / Series
-                </label>
-                <input
-                  id="veh-series"
-                  type="text"
-                  required
-                  value={series}
-                  onChange={(e) => setSeries(e.target.value)}
-                  placeholder="Vios"
-                  className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                />
-              </div>
+                  <div>
+                    <label
+                      htmlFor={`veh-series-${idx}`}
+                      className="block text-lg font-bold text-[#17191C]"
+                    >
+                      Vehicle Model / Series
+                    </label>
+                    <input
+                      id={`veh-series-${idx}`}
+                      type="text"
+                      required
+                      value={unit.series}
+                      onChange={(e) => updateUnitField(idx, "series", e.target.value)}
+                      placeholder="Vios"
+                      className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    />
+                  </div>
 
-              <div>
-                <label htmlFor="veh-year" className="block text-lg font-bold text-[#17191C]">
-                  Year Model
-                </label>
-                <input
-                  id="veh-year"
-                  type="number"
-                  required
-                  min={2010}
-                  max={2030}
-                  value={yearModel}
-                  onChange={(e) => setYearModel(e.target.value)}
-                  className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                />
-              </div>
+                  <div>
+                    <label
+                      htmlFor={`veh-year-${idx}`}
+                      className="block text-lg font-bold text-[#17191C]"
+                    >
+                      Year Model
+                    </label>
+                    <input
+                      id={`veh-year-${idx}`}
+                      type="number"
+                      required
+                      min={2010}
+                      max={2030}
+                      value={unit.year_model}
+                      onChange={(e) => updateUnitField(idx, "year_model", e.target.value)}
+                      className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    />
+                  </div>
 
-              <div>
-                <label htmlFor="veh-body" className="block text-lg font-bold text-[#17191C]">
-                  Body Type
-                </label>
-                <input
-                  id="veh-body"
-                  type="text"
-                  required
-                  value={bodyType}
-                  onChange={(e) => setBodyType(e.target.value)}
-                  placeholder="Sedan, MPV, SUV, or Van"
-                  className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                />
-              </div>
+                  <div>
+                    <label
+                      htmlFor={`veh-body-${idx}`}
+                      className="block text-lg font-bold text-[#17191C]"
+                    >
+                      Body Type
+                    </label>
+                    <input
+                      id={`veh-body-${idx}`}
+                      type="text"
+                      required
+                      value={unit.body_type}
+                      onChange={(e) => updateUnitField(idx, "body_type", e.target.value)}
+                      placeholder="Sedan, MPV, SUV, or Van"
+                      className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    />
+                  </div>
 
-              <div>
-                <label htmlFor="veh-ev" className="block text-lg font-bold text-[#17191C]">
-                  {requiresEvType
-                    ? "Electric Vehicle Type (Required for E-TNVS / EVT)"
-                    : "Electric Vehicle Type (Optional)"}
-                </label>
-                <select
-                  id="veh-ev"
-                  required={requiresEvType}
-                  value={evType}
-                  onChange={(e) => setEvType(e.target.value as "" | "BEV" | "PHEV" | "HEV")}
-                  className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                >
-                  {!requiresEvType && (
-                    <option value="">Not Electric (Gasoline / Diesel)</option>
-                  )}
-                  <option value="BEV">BEV — Battery Electric Vehicle</option>
-                  <option value="PHEV">PHEV — Plug-in Hybrid Electric Vehicle</option>
-                  <option value="HEV">HEV — Hybrid Electric Vehicle</option>
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="veh-engine" className="block text-lg font-bold text-[#17191C]">
-                  Engine Number
-                </label>
-                <input
-                  id="veh-engine"
-                  type="text"
-                  required={evType !== "BEV" && evType !== "PHEV"}
-                  value={engineNumber}
-                  onChange={(e) => setEngineNumber(e.target.value)}
-                  placeholder="Engine serial number"
-                  className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                />
-              </div>
-
-              <div>
-                <label htmlFor="veh-chassis" className="block text-lg font-bold text-[#17191C]">
-                  Chassis Number
-                </label>
-                <input
-                  id="veh-chassis"
-                  type="text"
-                  required
-                  value={chassisNumber}
-                  onChange={(e) => setChassisNumber(e.target.value)}
-                  placeholder="Chassis / VIN number"
-                  className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Vehicle Ownership Documents */}
-          <div className="rounded-xl bg-[#F6F5F1] p-5 sm:p-6">
-            <h3 className="text-xl font-bold text-[#17191C]">
-              Vehicle Documents (PDF Files, up to 5 MB)
-            </h3>
-            <p className="mt-1 text-base leading-relaxed text-[#374151]">
-              Upload your <strong>Sales Invoice PDF</strong> now so you can submit right away. You
-              do not need OR/CR yet — you can upload Official Receipt (OR) and Certificate of
-              Registration (CR) later when they arrive.
-            </p>
-
-            {!hasSavedLtfrbAccount && (
-              <p className="mt-3 rounded-xl bg-[#FEF3C7] px-4 py-3 text-base font-bold text-[#78350F]">
-                Please save your LTFRB login in Step 3 first before uploading PDF files.
-              </p>
-            )}
-
-            <div className="mt-5 space-y-4">
-              {[
-                {
-                  key: "sales_invoice" as const,
-                  title: "Sales Invoice (PDF) — Upload Now",
-                  hint: "Required at filing if you do not have your OR/CR yet.",
-                  url: salesInvoiceUrl,
-                  onClear: () => setSalesInvoiceUrl(null),
-                },
-                {
-                  key: "or" as const,
-                  title: "Official Receipt / OR (PDF) — Optional for Later",
-                  hint: "Leave empty for now if you are still waiting for your LTO OR.",
-                  url: orFileUrl,
-                  onClear: () => setOrFileUrl(null),
-                },
-                {
-                  key: "cr" as const,
-                  title: "Certificate of Registration / CR (PDF) — Optional for Later",
-                  hint: "Leave empty for now if you are still waiting for your LTO CR.",
-                  url: crFileUrl,
-                  onClear: () => setCrFileUrl(null),
-                },
-              ].map((doc) => (
-                <div key={doc.key} className="rounded-xl bg-white p-5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-lg font-bold text-[#17191C]">{doc.title}</p>
-                      <p className="mt-1 text-base text-[#4B5563]">{doc.hint}</p>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3">
-                      {doc.url ? (
-                        <>
-                          <span className="inline-block rounded-xl bg-[#DCFCE7] px-4 py-2 text-base font-bold text-[#14532D]">
-                            PDF Uploaded
-                          </span>
-                          <a
-                            href={doc.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex min-h-12 items-center rounded-xl bg-[#EEF1F4] px-4 py-2.5 text-base font-bold text-[#17191C] hover:bg-[#E2E6EB]"
-                          >
-                            View PDF
-                          </a>
-                          <button
-                            type="button"
-                            onClick={doc.onClear}
-                            className="min-h-12 rounded-xl bg-[#FEE2E2] px-4 py-2.5 text-base font-bold text-[#7F1D1D] hover:bg-[#FECACA]"
-                          >
-                            Remove
-                          </button>
-                        </>
-                      ) : (
-                        <label
-                          className={`inline-flex min-h-12 cursor-pointer items-center justify-center rounded-xl px-5 py-3 text-lg font-bold focus-within:ring-4 focus-within:ring-blue-700/30 ${
-                            hasSavedLtfrbAccount
-                              ? "bg-[#1D4ED8] text-white hover:bg-[#1E40AF]"
-                              : "bg-[#E7E5E4] text-[#6B7280]"
-                          }`}
-                        >
-                          {uploadingKey === doc.key ? "Uploading PDF..." : "Choose PDF File"}
-                          <input
-                            type="file"
-                            accept="application/pdf,.pdf"
-                            disabled={!hasSavedLtfrbAccount || uploadingKey !== null}
-                            onChange={(e) => {
-                              const picked = e.target.files?.[0];
-                              void handleFormFileChange(doc.key, picked);
-                              e.target.value = "";
-                            }}
-                            className="sr-only"
-                          />
-                        </label>
+                  <div>
+                    <label
+                      htmlFor={`veh-ev-${idx}`}
+                      className="block text-lg font-bold text-[#17191C]"
+                    >
+                      {requiresEvType
+                        ? "Electric Vehicle Type (Required for E-TNVS / EVT)"
+                        : "Electric Vehicle Type (Optional)"}
+                    </label>
+                    <select
+                      id={`veh-ev-${idx}`}
+                      required={requiresEvType}
+                      value={unit.ev_type}
+                      onChange={(e) =>
+                        updateUnitField(idx, "ev_type", e.target.value as "" | "BEV" | "PHEV" | "HEV")
+                      }
+                      className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    >
+                      {!requiresEvType && (
+                        <option value="">Not Electric (Gasoline / Diesel)</option>
                       )}
-                    </div>
+                      <option value="BEV">BEV — Battery Electric Vehicle</option>
+                      <option value="PHEV">PHEV — Plug-in Hybrid Electric Vehicle</option>
+                      <option value="HEV">HEV — Hybrid Electric Vehicle</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor={`veh-engine-${idx}`}
+                      className="block text-lg font-bold text-[#17191C]"
+                    >
+                      Engine Number
+                    </label>
+                    <input
+                      id={`veh-engine-${idx}`}
+                      type="text"
+                      required={unit.ev_type !== "BEV" && unit.ev_type !== "PHEV"}
+                      value={unit.engine_number}
+                      onChange={(e) => updateUnitField(idx, "engine_number", e.target.value)}
+                      placeholder="Engine serial number"
+                      className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor={`veh-chassis-${idx}`}
+                      className="block text-lg font-bold text-[#17191C]"
+                    >
+                      Chassis Number
+                    </label>
+                    <input
+                      id={`veh-chassis-${idx}`}
+                      type="text"
+                      required
+                      value={unit.chassis_number}
+                      onChange={(e) => updateUnitField(idx, "chassis_number", e.target.value)}
+                      placeholder="Chassis / VIN number"
+                      className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    />
                   </div>
                 </div>
-              ))}
-            </div>
+
+                {/* Per-Unit Ownership Documents */}
+                <div className="space-y-4">
+                  <h4 className="text-lg font-bold text-[#17191C]">
+                    {unitsDraft.length > 1
+                      ? `Unit ${idx + 1} Documents (PDF Files, up to 5 MB)`
+                      : "Vehicle Documents (PDF Files, up to 5 MB)"}
+                  </h4>
+                  {idx === 0 && !hasSavedLtfrbAccount && (
+                    <p className="rounded-xl bg-[#FEF3C7] px-4 py-3 text-base font-bold text-[#78350F]">
+                      Please save your LTFRB login in Step 3 first before uploading PDF files.
+                    </p>
+                  )}
+
+                  {[
+                    {
+                      key: "sales_invoice_file" as const,
+                      title: "Sales Invoice (PDF) — Upload Now",
+                      hint: "Required at filing if you do not have your OR/CR yet.",
+                      url: unit.sales_invoice_file,
+                    },
+                    {
+                      key: "or_file" as const,
+                      title: "Official Receipt / OR (PDF) — Optional for Later",
+                      hint: "Leave empty for now if you are still waiting for your LTO OR.",
+                      url: unit.or_file,
+                    },
+                    {
+                      key: "cr_file" as const,
+                      title: "Certificate of Registration / CR (PDF) — Optional for Later",
+                      hint: "Leave empty for now if you are still waiting for your LTO CR.",
+                      url: unit.cr_file,
+                    },
+                  ].map((doc) => {
+                    const uploadToken = `form:${idx}:${doc.key}`;
+                    return (
+                      <div key={doc.key} className="rounded-xl bg-white p-5">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-lg font-bold text-[#17191C]">{doc.title}</p>
+                            <p className="mt-1 text-base text-[#4B5563]">{doc.hint}</p>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-3">
+                            {doc.url ? (
+                              <>
+                                <span className="inline-block rounded-xl bg-[#DCFCE7] px-4 py-2 text-base font-bold text-[#14532D]">
+                                  PDF Uploaded
+                                </span>
+                                <a
+                                  href={doc.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex min-h-12 items-center rounded-xl bg-[#EEF1F4] px-4 py-2.5 text-base font-bold text-[#17191C] hover:bg-[#E2E6EB]"
+                                >
+                                  View PDF
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => updateUnitField(idx, doc.key, null)}
+                                  className="min-h-12 rounded-xl bg-[#FEE2E2] px-4 py-2.5 text-base font-bold text-[#7F1D1D] hover:bg-[#FECACA]"
+                                >
+                                  Remove
+                                </button>
+                              </>
+                            ) : (
+                              <label
+                                className={`inline-flex min-h-12 cursor-pointer items-center justify-center rounded-xl px-5 py-3 text-lg font-bold focus-within:ring-4 focus-within:ring-blue-700/30 ${
+                                  hasSavedLtfrbAccount
+                                    ? "bg-[#1D4ED8] text-white hover:bg-[#1E40AF]"
+                                    : "bg-[#E7E5E4] text-[#6B7280]"
+                                }`}
+                              >
+                                {uploadingKey === uploadToken
+                                  ? "Uploading PDF..."
+                                  : "Choose PDF File"}
+                                <input
+                                  type="file"
+                                  accept="application/pdf,.pdf"
+                                  disabled={!hasSavedLtfrbAccount || uploadingKey !== null}
+                                  onChange={(e) => {
+                                    const picked = e.target.files?.[0];
+                                    void handleFormFileChange(idx, doc.key, picked);
+                                    e.target.value = "";
+                                  }}
+                                  className="sr-only"
+                                />
+                              </label>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
 
           <div>
@@ -1008,15 +1196,23 @@ export default function AutoReserveTab({
               const isSubmitted = profile.lock_status === "submitted";
               const unit0 = profile.units?.[0];
               const docs = unit0?.documents;
+              const unitCount = profile.number_of_units || profile.units?.length || 1;
               const needsEv =
                 (profile.franchise_type_code === "E_TNVS" ||
                   profile.franchise_type_code === "EVT") &&
-                !unit0?.ev_type;
+                (profile.units ?? []).some((u) => !u.ev_type);
+
               return (
-                <div key={profile.id} className="rounded-xl bg-[#EEF1F4] p-5 space-y-4">
+                <div key={profile.id} className="space-y-4 rounded-xl bg-[#EEF1F4] p-5">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xl font-bold text-[#17191C]">{profile.profile_name}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-xl font-bold text-[#17191C]">{profile.profile_name}</p>
+                        <span className="rounded-lg bg-white px-3 py-1 text-base font-bold text-[#102E7A]">
+                          {profile.is_fleet ? "Fleet" : "Individual"} • {unitCount} Unit
+                          {unitCount === 1 ? "" : "s"}
+                        </span>
+                      </div>
                       <p className="mt-1 text-lg text-[#374151]">
                         {profile.franchise_type_code}
                         {unit0?.ev_type ? ` (${unit0.ev_type})` : ""} •{" "}
@@ -1024,6 +1220,16 @@ export default function AutoReserveTab({
                           ? `${profile.province_name}, ${profile.region_name}`
                           : profile.region_name}
                       </p>
+                      {profile.units && profile.units.length > 0 && (
+                        <p className="mt-1 text-base text-[#4B5563]">
+                          Units:{" "}
+                          <strong>
+                            {profile.units
+                              .map((u) => u.plate_number || "No Plate")
+                              .join(", ")}
+                          </strong>
+                        </p>
+                      )}
                       {needsEv && !isSubmitted && (
                         <div className="mt-3 rounded-xl bg-[#FEF3C7] p-4 text-[#78350F]">
                           <p className="text-base font-bold">

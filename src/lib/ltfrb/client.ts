@@ -407,6 +407,81 @@ export function hasValidOwnershipDocument(docs?: UnitDocuments | null): boolean 
   return hasSalesInvoice || hasOrAndCr;
 }
 
+export function validateApplicationUnits(params: {
+  franchiseTypeCode: string;
+  isFleet: boolean;
+  numberOfUnits: number;
+  units: VehicleUnitInput[];
+  requireDocuments: boolean;
+}): { valid: true } | { valid: false; error: string } {
+  const { franchiseTypeCode, isFleet, numberOfUnits, units, requireDocuments } = params;
+
+  if (!Number.isInteger(numberOfUnits) || numberOfUnits < 1 || numberOfUnits > 50) {
+    return {
+      valid: false,
+      error: "Please enter a valid number of authorized units (between 1 and 50).",
+    };
+  }
+
+  if (isFleet && numberOfUnits < 2) {
+    return {
+      valid: false,
+      error: "Fleet applications require at least 2 authorized units. Switch to Individual for 1 unit.",
+    };
+  }
+
+  if (!Array.isArray(units) || units.length !== numberOfUnits) {
+    return {
+      valid: false,
+      error: `Please fill in vehicle details for all ${numberOfUnits} authorized unit(s).`,
+    };
+  }
+
+  const requiresEvType = franchiseTypeCode === "E_TNVS" || franchiseTypeCode === "EVT";
+
+  for (let i = 0; i < units.length; i += 1) {
+    const unit = units[i];
+    const label = numberOfUnits > 1 ? `Unit ${i + 1}: ` : "";
+
+    if (!unit?.plate_number?.trim() || !unit?.mv_file_number?.trim() || !unit?.make?.trim() || !unit?.series?.trim() || !unit?.chassis_number?.trim()) {
+      return {
+        valid: false,
+        error: `${label}Please complete plate number, MV file number, make, model, and chassis number.`,
+      };
+    }
+
+    if (!unit?.body_type?.trim()) {
+      return {
+        valid: false,
+        error: `${label}Please enter the vehicle Body Type (for example: Sedan, MPV, SUV, or Van).`,
+      };
+    }
+
+    if (requiresEvType && (!unit.ev_type || !["BEV", "PHEV", "HEV"].includes(unit.ev_type))) {
+      return {
+        valid: false,
+        error: `${label}Please pick an Electric Vehicle Type (BEV, PHEV, or HEV) for ${franchiseTypeCode}.`,
+      };
+    }
+
+    if (unit.ev_type !== "BEV" && unit.ev_type !== "PHEV" && !unit?.engine_number?.trim()) {
+      return {
+        valid: false,
+        error: `${label}Please enter the Engine Number.`,
+      };
+    }
+
+    if (requireDocuments && !hasValidOwnershipDocument(unit.documents)) {
+      return {
+        valid: false,
+        error: `${label}Please upload your Sales Invoice PDF (or both OR and CR PDFs) before turning on Automatic Slot Reservation.`,
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
 export async function uploadLtfrbDocument(params: {
   token: string;
   file: Blob;

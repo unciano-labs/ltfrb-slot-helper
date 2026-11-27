@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/env";
-import { hasValidOwnershipDocument } from "@/lib/ltfrb/client";
+import { validateApplicationUnits } from "@/lib/ltfrb/client";
 import type { VehicleUnitInput } from "@/lib/ltfrb/types";
 import { assertUserCanManageAutomation } from "@/lib/monitor/entitlements";
 import { isFranchiseAllowedForAccount } from "@/lib/monitor/preferences";
@@ -88,30 +88,8 @@ export async function POST(request: NextRequest) {
   }
 
   const units = Array.isArray(body.units) ? (body.units as VehicleUnitInput[]) : [];
-  if (units.length === 0) {
-    return NextResponse.json(
-      { error: "Please fill in at least one vehicle unit (plate number, make, year)." },
-      { status: 400 }
-    );
-  }
-
-  if (!units[0]?.body_type?.trim()) {
-    return NextResponse.json(
-      { error: "Please enter the vehicle Body Type (for example: Sedan, MPV, SUV, or Van)." },
-      { status: 400 }
-    );
-  }
-
-  const requiresEvType = franchiseTypeCode === "E_TNVS" || franchiseTypeCode === "EVT";
-  const evType = units[0]?.ev_type;
-  if (requiresEvType && (!evType || !["BEV", "PHEV", "HEV"].includes(evType))) {
-    return NextResponse.json(
-      {
-        error: `Please pick an Electric Vehicle Type (BEV, PHEV, or HEV) for ${franchiseTypeCode}.`,
-      },
-      { status: 400 }
-    );
-  }
+  const isFleet = Boolean(body.is_fleet);
+  const numberOfUnits = Math.max(1, Math.floor(Number(body.number_of_units ?? units.length) || 1));
 
   const wantsArmed = Boolean(body.is_armed);
   const submitOnIncrease = body.submit_on_slot_increase !== false;
@@ -128,14 +106,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (wantsArmed && !hasValidOwnershipDocument(units[0]?.documents)) {
-    return NextResponse.json(
-      {
-        error:
-          "Please upload your Sales Invoice PDF (or both OR and CR PDFs) before turning on Automatic Slot Reservation.",
-      },
-      { status: 400 }
-    );
+  const unitsCheck = validateApplicationUnits({
+    franchiseTypeCode,
+    isFleet,
+    numberOfUnits,
+    units,
+    requireDocuments: wantsArmed,
+  });
+  if (!unitsCheck.valid) {
+    return NextResponse.json({ error: unitsCheck.error }, { status: 400 });
   }
 
   const { supabase, websiteId } = getTenantContext();
@@ -187,8 +166,8 @@ export async function POST(request: NextRequest) {
       province_name: body.province_name ? String(body.province_name) : null,
       route_id: body.route_id ? String(body.route_id) : null,
       route_name: body.route_name ? String(body.route_name) : null,
-      number_of_units: Math.max(1, Number(body.number_of_units ?? units.length) || 1),
-      is_fleet: Boolean(body.is_fleet),
+      number_of_units: numberOfUnits,
+      is_fleet: isFleet,
       units,
       notify_email: body.notify_email ? String(body.notify_email).trim() : user.email ?? null,
       is_armed: Boolean(body.is_armed),
@@ -300,12 +279,27 @@ export async function PATCH(request: NextRequest) {
     updates.submit_at_midnight = body.submit_at_midnight;
   if (typeof body?.submit_hourly === "boolean")
     updates.submit_hourly = body.submit_hourly;
-  if (Array.isArray(body?.units)) updates.units = body.units as VehicleUnitInput[];
+  if (typeof body?.is_fleet === "boolean")
+    updates.is_fleet = body.is_fleet;
+  if (body && "number_of_units" in body) {
+    updates.number_of_units = Math.max(1, Math.floor(Number(body.number_of_units) || 1));
+  }
+  if (Array.isArray(body?.units)) {
+    updates.units = body.units as VehicleUnitInput[];
+    if (!("number_of_units" in updates)) {
+      updates.number_of_units = (body.units as VehicleUnitInput[]).length;
+    }
+  }
 
   const effectiveFranchiseCode = String(
     updates.franchise_type_code ?? existing.franchise_type_code
   );
   const effectiveUnits = (updates.units ?? existing.units) as VehicleUnitInput[];
+  const effectiveIsFleet =
+    typeof updates.is_fleet === "boolean" ? updates.is_fleet : Boolean(existing.is_fleet);
+  const effectiveNumberOfUnits = Number(
+    updates.number_of_units ?? existing.number_of_units ?? effectiveUnits.length
+  );
   const effectiveArmed =
     typeof updates.is_armed === "boolean" ? updates.is_armed : Boolean(existing.is_armed);
   const effectiveOnIncrease =
@@ -321,25 +315,6 @@ export async function PATCH(request: NextRequest) {
       ? updates.submit_hourly
       : Boolean(existing.submit_hourly);
 
-  if (!effectiveUnits[0]?.body_type?.trim()) {
-    return NextResponse.json(
-      { error: "Please enter the vehicle Body Type (for example: Sedan, MPV, SUV, or Van)." },
-      { status: 400 }
-    );
-  }
-
-  const requiresEvType =
-    effectiveFranchiseCode === "E_TNVS" || effectiveFranchiseCode === "EVT";
-  const evType = effectiveUnits[0]?.ev_type;
-  if (requiresEvType && (!evType || !["BEV", "PHEV", "HEV"].includes(evType))) {
-    return NextResponse.json(
-      {
-        error: `Please pick an Electric Vehicle Type (BEV, PHEV, or HEV) for ${effectiveFranchiseCode}.`,
-      },
-      { status: 400 }
-    );
-  }
-
   if (effectiveArmed && !effectiveOnIncrease && !effectiveAtMidnight && !effectiveHourly) {
     return NextResponse.json(
       {
@@ -350,14 +325,15 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  if (effectiveArmed && !hasValidOwnershipDocument(effectiveUnits[0]?.documents)) {
-    return NextResponse.json(
-      {
-        error:
-          "Please upload your Sales Invoice PDF (or both OR and CR PDFs) before turning on Auto-Reserve.",
-      },
-      { status: 400 }
-    );
+  const patchUnitsCheck = validateApplicationUnits({
+    franchiseTypeCode: effectiveFranchiseCode,
+    isFleet: effectiveIsFleet,
+    numberOfUnits: effectiveNumberOfUnits,
+    units: effectiveUnits,
+    requireDocuments: effectiveArmed,
+  });
+  if (!patchUnitsCheck.valid) {
+    return NextResponse.json({ error: patchUnitsCheck.error }, { status: 400 });
   }
 
   const { data, error } = await supabase
