@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import ModalDialog from "@/components/ModalDialog";
 import type { ApplicationProfile, SubmissionLogRow, WatchRule } from "@/lib/ltfrb/types";
 import type { CronRunSummary, NotificationLogSummary } from "@/lib/monitor/dashboard-data";
 import type { PaymentRequestRow } from "@/lib/monitor/monetization";
@@ -28,7 +29,6 @@ type ServerLogCategory = "movements" | "submissions" | "emails" | "checks";
 
 const PAGE_SIZE = 10;
 const SERVER_FETCH_BATCH = 40;
-const HOUR_PREVIEW_LIMIT = 12;
 
 function formatManilaTime(iso: string | null | undefined): string {
   if (!iso) return "Not recorded";
@@ -159,9 +159,9 @@ export default function ActivityLogsTab({
   const [onlyMyFranchises, setOnlyMyFranchises] = useState(hasUserFilter);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Expandable hours in Hourly Slot Activity
-  const [expandedHours, setExpandedHours] = useState<Record<number, boolean>>({});
-  const [expandedHourShowAll, setExpandedHourShowAll] = useState<Record<number, boolean>>({});
+  // Selected hour for Hourly Slot Activity modal
+  const [selectedHour, setSelectedHour] = useState<number | null>(null);
+  const [hourModalPage, setHourModalPage] = useState(1);
 
   // Client pagination + server-loaded older history per section
   const [pages, setPages] = useState<Record<Exclude<LogCategory, "all">, number>>({
@@ -252,8 +252,27 @@ export default function ActivityLogsTab({
     [analysis.activeHours]
   );
 
-  function toggleHour(hour: number) {
-    setExpandedHours((prev) => ({ ...prev, [hour]: !prev[hour] }));
+  const selectedHourStat = useMemo(
+    () =>
+      selectedHour === null
+        ? null
+        : analysis.activeHours.find((h) => h.hour === selectedHour) ?? null,
+    [analysis.activeHours, selectedHour]
+  );
+
+  const selectedHourEvents = useMemo(
+    () => (selectedHour === null ? [] : eventsByHour.get(selectedHour) ?? []),
+    [eventsByHour, selectedHour]
+  );
+
+  function openHourModal(hour: number) {
+    setSelectedHour(hour);
+    setHourModalPage(1);
+  }
+
+  function closeHourModal() {
+    setSelectedHour(null);
+    setHourModalPage(1);
   }
 
   async function loadMoreFromServer(target: ServerLogCategory): Promise<number> {
@@ -471,105 +490,44 @@ export default function ActivityLogsTab({
                   Hourly Slot Activity (Manila Time)
                 </h4>
                 <p className="mt-1 text-base text-[#52525B]">
-                  Tap any hour row below to expand exact slot changes inside that hour.
+                  Tap any hour row below to open detailed slot changes inside that hour.
                 </p>
 
                 <div className="mt-4 space-y-3">
                   {analysis.activeHours.map((h) => {
                     const total = h.openings + h.decreases;
                     const pct = Math.max(8, Math.round((total / maxHourCount) * 100));
-                    const isExpanded = Boolean(expandedHours[h.hour]);
-                    const hourEvents = eventsByHour.get(h.hour) ?? [];
-                    const showAllInHour = Boolean(expandedHourShowAll[h.hour]);
-                    const visibleHourEvents = showAllInHour
-                      ? hourEvents
-                      : hourEvents.slice(0, HOUR_PREVIEW_LIMIT);
+                    const hourEventsCount = (eventsByHour.get(h.hour) ?? []).length;
 
                     return (
-                      <div key={h.hour} className="rounded-xl bg-white p-3.5">
-                        <button
-                          type="button"
-                          aria-expanded={isExpanded}
-                          onClick={() => toggleHour(h.hour)}
-                          className="min-h-12 w-full rounded-lg p-1 text-left transition-colors hover:bg-[#F4F4F5] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2 text-base">
-                            <span className="font-bold text-[#0A0A0A]">{h.label}</span>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="text-[#3F3F46]">
-                                {h.refills > 0 ? `${h.refills} refill(s)` : ""}{" "}
-                                {h.increases > 0 ? `+${h.increases} inc` : ""}{" "}
-                                {h.decreases > 0 ? `${h.decreases} dec` : ""}
-                              </span>
-                              <span className="rounded-lg bg-[#EFF6FF] px-3 py-1 text-base font-bold text-[#1447E6]">
-                                {isExpanded ? "Hide ▴" : `Details (${hourEvents.length}) ▾`}
-                              </span>
-                            </div>
+                      <button
+                        key={h.hour}
+                        type="button"
+                        onClick={() => openHourModal(h.hour)}
+                        className="min-h-12 w-full rounded-xl bg-white p-4 text-left transition-colors hover:bg-[#EFF6FF] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-base">
+                          <span className="font-bold text-[#0A0A0A]">{h.label}</span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-[#3F3F46]">
+                              {h.refills > 0 ? `${h.refills} refill(s)` : ""}{" "}
+                              {h.increases > 0 ? `+${h.increases} inc` : ""}{" "}
+                              {h.decreases > 0 ? `${h.decreases} dec` : ""}
+                            </span>
+                            <span className="rounded-lg bg-[#EFF6FF] px-3 py-1 text-base font-bold text-[#1447E6]">
+                              View Details ({hourEventsCount})
+                            </span>
                           </div>
-                          <div className="mt-2 h-3 w-full overflow-hidden rounded-lg bg-[#F4F4F5]">
-                            <div
-                              className={`h-3 rounded-lg ${
-                                h.openings > 0 ? "bg-[#1447E6]" : "bg-[#A1A1AA]"
-                              }`}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                        </button>
-
-                        {isExpanded && (
-                          <div className="mt-3 space-y-2.5 rounded-xl bg-[#F4F4F5] p-3">
-                            {hourEvents.length === 0 ? (
-                              <p className="text-base text-[#52525B]">
-                                No detailed events recorded for this hour.
-                              </p>
-                            ) : (
-                              <>
-                                {visibleHourEvents.map((ev) => {
-                                  const badge = movementBadge(ev);
-                                  return (
-                                    <div
-                                      key={ev.id}
-                                      className="flex flex-col gap-2 rounded-lg bg-white p-3 sm:flex-row sm:items-center sm:justify-between"
-                                    >
-                                      <div>
-                                        <p className="text-base font-bold text-[#0A0A0A]">
-                                          {ev.franchise_type_name} — {badge.areaLabel}
-                                        </p>
-                                        <p className="mt-0.5 text-base text-[#52525B]">
-                                          {formatManilaTime(ev.occurred_at)} •{" "}
-                                          <strong>
-                                            {ev.previous_remaining} → {ev.new_remaining}
-                                          </strong>
-                                        </p>
-                                      </div>
-                                      <span
-                                        className={`inline-block shrink-0 rounded-lg px-3 py-1.5 text-base font-bold ${badge.style}`}
-                                      >
-                                        {badge.text}
-                                      </span>
-                                    </div>
-                                  );
-                                })}
-
-                                {hourEvents.length > HOUR_PREVIEW_LIMIT && !showAllInHour && (
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setExpandedHourShowAll((prev) => ({
-                                        ...prev,
-                                        [h.hour]: true,
-                                      }))
-                                    }
-                                    className="min-h-12 w-full rounded-lg bg-white px-4 py-2 text-base font-bold text-[#1447E6] hover:bg-[#EFF6FF]"
-                                  >
-                                    Show All {hourEvents.length} Events in This Hour
-                                  </button>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                        </div>
+                        <div className="mt-2 h-3 w-full overflow-hidden rounded-lg bg-[#F4F4F5]">
+                          <div
+                            className={`h-3 rounded-lg ${
+                              h.openings > 0 ? "bg-[#1447E6]" : "bg-[#A1A1AA]"
+                            }`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -915,6 +873,72 @@ export default function ActivityLogsTab({
           )}
         </div>
       )}
+
+      {/* Hourly Slot Activity Details Modal */}
+      <ModalDialog
+        open={selectedHourStat !== null}
+        title={
+          selectedHourStat
+            ? `${selectedHourStat.label} (Manila Time)`
+            : "Hourly Slot Activity Details"
+        }
+        subtitle={
+          selectedHourStat
+            ? `${selectedHourStat.refills} new open refill(s) • ${selectedHourStat.increases} increase(s) • ${selectedHourStat.decreases} decrease(s) • ${selectedHourEvents.length} event(s) recorded`
+            : undefined
+        }
+        titleId="hour-activity-modal-title"
+        maxWidthClass="max-w-3xl"
+        onClose={closeHourModal}
+      >
+        {selectedHourEvents.length === 0 ? (
+          <p className="text-lg text-[#52525B]">No detailed events recorded for this hour.</p>
+        ) : (
+          <>
+            <div className="space-y-3">
+              {selectedHourEvents
+                .slice((hourModalPage - 1) * PAGE_SIZE, hourModalPage * PAGE_SIZE)
+                .map((ev) => {
+                  const badge = movementBadge(ev);
+                  return (
+                    <div
+                      key={ev.id}
+                      className="flex flex-col gap-3 rounded-xl bg-[#F4F4F5] p-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div>
+                        <p className="text-lg font-bold text-[#0A0A0A]">
+                          {ev.franchise_type_name} — {badge.areaLabel}
+                        </p>
+                        <p className="mt-1 text-base text-[#52525B]">
+                          {formatManilaTime(ev.occurred_at)} • Slots changed:{" "}
+                          <strong>
+                            {ev.previous_remaining} → {ev.new_remaining}
+                          </strong>
+                        </p>
+                      </div>
+                      <span
+                        className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold ${badge.style}`}
+                      >
+                        {badge.text}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+            <PaginationBar
+              page={hourModalPage}
+              totalItems={selectedHourEvents.length}
+              pageSize={PAGE_SIZE}
+              onPrev={() => setHourModalPage((p) => Math.max(1, p - 1))}
+              onNext={() =>
+                setHourModalPage((p) =>
+                  Math.min(Math.ceil(selectedHourEvents.length / PAGE_SIZE), p + 1)
+                )
+              }
+            />
+          </>
+        )}
+      </ModalDialog>
     </section>
   );
 }
