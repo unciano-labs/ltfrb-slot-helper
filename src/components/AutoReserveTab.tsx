@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { isPresignedS3UrlExpired } from "@/lib/ltfrb/client";
 import type {
   ApplicationProfile,
   FranchiseType,
@@ -37,13 +38,6 @@ interface UnitDraft {
   or_file: string | null;
   cr_file: string | null;
   document_storage_paths: Partial<Record<UnitDocumentKey, string | null>>;
-}
-
-function getViewPdfHref(ltfrbUrl: string | null | undefined, storagePath?: string | null): string {
-  if (storagePath) {
-    return `/api/ltfrb/document?path=${encodeURIComponent(storagePath)}`;
-  }
-  return ltfrbUrl || "#";
 }
 
 function createEmptyUnitDraft(requiresEvType: boolean): UnitDraft {
@@ -314,6 +308,74 @@ export default function AutoReserveTab({
       onBanner({
         kind: "error",
         text: err instanceof Error ? err.message : "Could not upload document.",
+      });
+    } finally {
+      setUploadingKey(null);
+    }
+  }
+
+  async function handleRefreshFormDoc(
+    unitIndex: number,
+    docKey: "sales_invoice_file" | "or_file" | "cr_file",
+    storagePath: string
+  ) {
+    setUploadingKey(`refresh-form:${unitIndex}:${docKey}`);
+    try {
+      const res = await fetch("/api/ltfrb/document/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storagePath, docKey }),
+      });
+      const json = (await res.json()) as { ok?: boolean; url?: string; error?: string };
+      if (!res.ok || !json.url) {
+        throw new Error(json.error || "Could not refresh LTFRB S3 link.");
+      }
+      updateUnitField(unitIndex, docKey, json.url);
+      onBanner({
+        kind: "success",
+        text: `Unit ${unitIndex + 1} LTFRB S3 link refreshed! You can preview it directly now.`,
+      });
+    } catch (err) {
+      onBanner({
+        kind: "error",
+        text: err instanceof Error ? err.message : "Could not refresh LTFRB S3 link.",
+      });
+    } finally {
+      setUploadingKey(null);
+    }
+  }
+
+  async function handleRefreshSavedDoc(
+    profile: ApplicationProfile,
+    unitIndex: number,
+    docKey: "sales_invoice_file" | "or_file" | "cr_file",
+    storagePath: string
+  ) {
+    setUploadingKey(`refresh-saved:${profile.id}:${unitIndex}:${docKey}`);
+    try {
+      const res = await fetch("/api/ltfrb/document/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storagePath,
+          profileId: profile.id,
+          unitIndex,
+          docKey,
+        }),
+      });
+      const json = (await res.json()) as { ok?: boolean; url?: string; error?: string };
+      if (!res.ok || !json.url) {
+        throw new Error(json.error || "Could not refresh LTFRB S3 link.");
+      }
+      await onRefresh();
+      onBanner({
+        kind: "success",
+        text: "Refreshed LTFRB S3 link from your backup PDF. Click View PDF (LTFRB S3) to verify.",
+      });
+    } catch (err) {
+      onBanner({
+        kind: "error",
+        text: err instanceof Error ? err.message : "Could not refresh LTFRB S3 link.",
       });
     } finally {
       setUploadingKey(null);
@@ -1033,6 +1095,10 @@ export default function AutoReserveTab({
                     },
                   ].map((doc) => {
                     const uploadToken = `form:${idx}:${doc.key}`;
+                    const refreshToken = `refresh-form:${idx}:${doc.key}`;
+                    const backupPath = unit.document_storage_paths?.[doc.key];
+                    const isExpired = doc.url ? isPresignedS3UrlExpired(doc.url) : false;
+
                     return (
                       <div key={doc.key} className="rounded-xl bg-white p-5">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1044,20 +1110,37 @@ export default function AutoReserveTab({
                           <div className="flex flex-wrap items-center gap-3">
                             {doc.url ? (
                               <>
-                                <span className="inline-block rounded-xl bg-[#DCFCE7] px-4 py-2 text-base font-bold text-[#14532D]">
-                                  PDF Uploaded
+                                <span
+                                  className={`inline-block rounded-xl px-4 py-2 text-base font-bold ${
+                                    isExpired
+                                      ? "bg-[#FEF3C7] text-[#78350F]"
+                                      : "bg-[#DCFCE7] text-[#14532D]"
+                                  }`}
+                                >
+                                  {isExpired ? "LTFRB S3 Link Expired" : "LTFRB S3 Link Valid"}
                                 </span>
                                 <a
-                                  href={getViewPdfHref(
-                                    doc.url,
-                                    unit.document_storage_paths?.[doc.key]
-                                  )}
+                                  href={doc.url}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="inline-flex min-h-12 items-center rounded-xl bg-[#EEF1F4] px-4 py-2.5 text-base font-bold text-[#17191C] hover:bg-[#E2E6EB]"
                                 >
-                                  View PDF
+                                  View PDF (LTFRB S3)
                                 </a>
+                                {backupPath && (
+                                  <button
+                                    type="button"
+                                    disabled={uploadingKey !== null || !hasSavedLtfrbAccount}
+                                    onClick={() =>
+                                      void handleRefreshFormDoc(idx, doc.key, backupPath)
+                                    }
+                                    className="min-h-12 rounded-xl bg-[#DBEAFE] px-4 py-2.5 text-base font-bold text-[#1E3A8A] hover:bg-[#BFDBFE] disabled:opacity-60"
+                                  >
+                                    {uploadingKey === refreshToken
+                                      ? "Refreshing..."
+                                      : "Refresh LTFRB Link"}
+                                  </button>
+                                )}
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -1303,53 +1386,54 @@ export default function AutoReserveTab({
                         </div>
                       )}
                       <div className="mt-2 flex flex-wrap gap-2">
-                        {docs?.sales_invoice_file ? (
-                          <a
-                            href={getViewPdfHref(
-                              docs.sales_invoice_file,
-                              paths0?.sales_invoice_file
-                            )}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-block rounded-lg bg-[#DCFCE7] px-3 py-1.5 text-base font-bold text-[#14532D] hover:bg-[#BBF7D0]"
-                          >
-                            Sales Invoice: Ready (View PDF)
-                          </a>
-                        ) : (
-                          <span className="inline-block rounded-lg bg-white px-3 py-1.5 text-base font-bold text-[#4B5563]">
-                            Sales Invoice: None
-                          </span>
-                        )}
-
-                        {docs?.or_file ? (
-                          <a
-                            href={getViewPdfHref(docs.or_file, paths0?.or_file)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-block rounded-lg bg-[#DCFCE7] px-3 py-1.5 text-base font-bold text-[#14532D] hover:bg-[#BBF7D0]"
-                          >
-                            OR: Ready (View PDF)
-                          </a>
-                        ) : (
-                          <span className="inline-block rounded-lg bg-white px-3 py-1.5 text-base font-bold text-[#4B5563]">
-                            OR: Add Later
-                          </span>
-                        )}
-
-                        {docs?.cr_file ? (
-                          <a
-                            href={getViewPdfHref(docs.cr_file, paths0?.cr_file)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-block rounded-lg bg-[#DCFCE7] px-3 py-1.5 text-base font-bold text-[#14532D] hover:bg-[#BBF7D0]"
-                          >
-                            CR: Ready (View PDF)
-                          </a>
-                        ) : (
-                          <span className="inline-block rounded-lg bg-white px-3 py-1.5 text-base font-bold text-[#4B5563]">
-                            CR: Add Later
-                          </span>
-                        )}
+                        {[
+                          { key: "sales_invoice_file" as const, label: "Sales Invoice", empty: "None" },
+                          { key: "or_file" as const, label: "OR", empty: "Add Later" },
+                          { key: "cr_file" as const, label: "CR", empty: "Add Later" },
+                        ].map((item) => {
+                          const url = docs?.[item.key];
+                          const path = paths0?.[item.key];
+                          if (!url) {
+                            return (
+                              <span
+                                key={item.key}
+                                className="inline-block rounded-lg bg-white px-3 py-1.5 text-base font-bold text-[#4B5563]"
+                              >
+                                {item.label}: {item.empty}
+                              </span>
+                            );
+                          }
+                          const expired = isPresignedS3UrlExpired(url);
+                          const refreshKey = `refresh-saved:${profile.id}:0:${item.key}`;
+                          return (
+                            <div key={item.key} className="flex flex-wrap items-center gap-2">
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={`inline-block rounded-lg px-3 py-1.5 text-base font-bold ${
+                                  expired
+                                    ? "bg-[#FEF3C7] text-[#78350F] hover:bg-[#FDE68A]"
+                                    : "bg-[#DCFCE7] text-[#14532D] hover:bg-[#BBF7D0]"
+                                }`}
+                              >
+                                {item.label}: {expired ? "S3 Expired (Check)" : "View PDF (LTFRB S3)"}
+                              </a>
+                              {path && expired && hasSavedLtfrbAccount && !isSubmitted && (
+                                <button
+                                  type="button"
+                                  disabled={uploadingKey !== null}
+                                  onClick={() =>
+                                    void handleRefreshSavedDoc(profile, 0, item.key, path)
+                                  }
+                                  className="rounded-lg bg-[#DBEAFE] px-3 py-1.5 text-base font-bold text-[#1E3A8A] hover:bg-[#BFDBFE] disabled:opacity-60"
+                                >
+                                  {uploadingKey === refreshKey ? "Refreshing..." : "Refresh S3 Link"}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                       {profile.submitted_reference && (
                         <p className="mt-2 text-lg font-bold text-[#14532D]">
