@@ -68,6 +68,7 @@ export interface DashboardPayload {
   regionSlots: SlotEntry[];
   provinceSlots: SlotEntry[];
   lastRun: CronRunSummary | null;
+  recentRuns: CronRunSummary[];
   watchRules: WatchRule[];
   recentNotifications: NotificationLogSummary[];
   reservationProfiles: ApplicationProfile[];
@@ -126,6 +127,7 @@ export async function loadDashboardData(options?: {
   let savedAccount: SavedAccountSummary | null = null;
   let monitoredFranchiseCodes: string[] = [];
   let lastRun: CronRunSummary | null = null;
+  let recentRuns: CronRunSummary[] = [];
   let watchRules: WatchRule[] = [];
   let recentNotifications: NotificationLogSummary[] = [];
   let reservationProfiles: ApplicationProfile[] = [];
@@ -163,14 +165,14 @@ export async function loadDashboardData(options?: {
         .select("*")
         .eq("website_id", websiteId)
         .order("started_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+        .limit(10),
     ]);
 
     if (authUser) {
       user = { id: authUser.id, email: authUser.email ?? null };
     }
-    lastRun = (lastRunRes.data as CronRunSummary | null) ?? null;
+    recentRuns = (lastRunRes.data as CronRunSummary[] | null) ?? [];
+    lastRun = recentRuns[0] ?? null;
 
     const latestCheckedAt = (latestSnapRes.data as { checked_at?: string } | null)?.checked_at;
     if (latestCheckedAt) {
@@ -315,6 +317,7 @@ export async function loadDashboardData(options?: {
     regionSlots,
     provinceSlots,
     lastRun,
+    recentRuns,
     watchRules,
     recentNotifications,
     reservationProfiles,

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ActivityLogsTab from "@/components/ActivityLogsTab";
 import AutoReserveTab from "@/components/AutoReserveTab";
 import BillingTab from "@/components/BillingTab";
 import FranchisePickerCard from "@/components/FranchisePickerCard";
@@ -31,7 +32,7 @@ import {
   type UserEntitlements,
 } from "@/lib/monitor/monetization";
 
-type ActiveTab = "slots" | "alerts" | "account" | "reserve" | "billing";
+type ActiveTab = "slots" | "alerts" | "account" | "reserve" | "billing" | "logs";
 
 interface SessionUser {
   id: string;
@@ -84,6 +85,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
     initialData?.provinceSlots ?? []
   );
   const [lastRun, setLastRun] = useState<CronRunRow | null>(initialData?.lastRun ?? null);
+  const [recentRuns, setRecentRuns] = useState<CronRunRow[]>(initialData?.recentRuns ?? []);
   const [watchRules, setWatchRules] = useState<WatchRule[]>(initialData?.watchRules ?? []);
   const [recentNotifications, setRecentNotifications] = useState<NotificationLogRow[]>(
     initialData?.recentNotifications ?? []
@@ -159,6 +161,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
     setRegionSlots(slotsJson.regionSlots ?? []);
     setProvinceSlots(slotsJson.provinceSlots ?? []);
     setLastRun(slotsJson.lastRun ?? null);
+    setRecentRuns(slotsJson.recentRuns ?? []);
     setWatchRules(slotsJson.watchRules ?? []);
     setRecentNotifications(slotsJson.recentNotifications ?? []);
     setReservationProfiles(slotsJson.reservationProfiles ?? []);
@@ -513,6 +516,10 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
       title: "Plan, Add-Ons & GCash / Maya QR Billing",
       subtitle: "Manage your ₱1,699 1-Year All-Features Plan, extra Auto-Reserve profiles, and Alert slots.",
     },
+    logs: {
+      title: "Activity & System Logs",
+      subtitle: "Track automatic slot checks, email notifications sent, reservation attempts, and payments.",
+    },
   };
 
   const canUseSuperAdmin = isSuperAdminEmail(user?.email);
@@ -690,6 +697,27 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                       : entitlements.status === "pending"
                       ? "Pending"
                       : "₱1,699"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => selectTab("logs")}
+                  className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+                    activeTab === "logs"
+                      ? "bg-[#1447E6] text-white"
+                      : "bg-[#F4F4F5] text-[#18181B] hover:bg-[#E4E4E7]"
+                  }`}
+                >
+                  <span>6. Activity Logs</span>
+                  <span
+                    className={`shrink-0 rounded-lg px-2.5 py-0.5 text-base font-bold ${
+                      activeTab === "logs"
+                        ? "bg-[#102E7A] text-white"
+                        : "bg-white text-[#18181B]"
+                    }`}
+                  >
+                    {submissionLogs.length + recentNotifications.length + recentRuns.length}
                   </span>
                 </button>
               </div>
@@ -1491,6 +1519,24 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
               billingSchemaReady={billingSchemaReady}
               onRefresh={loadData}
               onBanner={setBanner}
+            />
+          ))}
+
+        {/* TAB 6: ACTIVITY & SYSTEM LOGS */}
+        {activeTab === "logs" &&
+          (!user ? (
+            <SignInRequiredCard
+              title="Sign In to View Activity Logs"
+              description="Please sign in first to review your email alerts, auto-reservation attempts, slot checks, and payment logs."
+            />
+          ) : entitlements.isDisabled ? null : (
+            <ActivityLogsTab
+              recentRuns={recentRuns}
+              submissionLogs={submissionLogs}
+              recentNotifications={recentNotifications}
+              paymentRequests={paymentRequests}
+              reservationProfiles={reservationProfiles}
+              onRefresh={loadData}
             />
           ))}
       </main>
