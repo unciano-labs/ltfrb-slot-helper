@@ -30,6 +30,17 @@ type ServerLogCategory = "movements" | "submissions" | "emails" | "checks";
 const PAGE_SIZE = 10;
 const SERVER_FETCH_BATCH = 40;
 
+function formatCompactHourLabel(hour: number): string {
+  const normalized = ((hour % 24) + 24) % 24;
+  if (normalized === 0) return "12–1 AM";
+  if (normalized === 11) return "11 AM–12 PM";
+  if (normalized === 12) return "12–1 PM";
+  if (normalized === 23) return "11 PM–12 AM";
+  const period = normalized >= 12 ? "PM" : "AM";
+  const h12 = normalized > 12 ? normalized - 12 : normalized;
+  return `${h12}–${h12 + 1} ${period}`;
+}
+
 function formatManilaTime(iso: string | null | undefined): string {
   if (!iso) return "Not recorded";
   const parsed = new Date(iso);
@@ -485,43 +496,49 @@ export default function ActivityLogsTab({
           {/* Top Hours (Clickable & Expandable) & Best Days */}
           {analysis.activeHours.length > 0 && (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="rounded-xl bg-[#F4F4F5] p-5">
+              <div className="rounded-xl bg-[#F4F4F5] p-4 sm:p-5">
                 <h4 className="text-xl font-bold text-[#0A0A0A]">
                   Hourly Slot Activity (Manila Time)
                 </h4>
                 <p className="mt-1 text-base text-[#52525B]">
-                  Tap any hour row below to open detailed slot changes inside that hour.
+                  Tap any hour to view detailed changes inside a modal.
                 </p>
 
-                <div className="mt-4 space-y-3">
+                <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {analysis.activeHours.map((h) => {
                     const total = h.openings + h.decreases;
                     const pct = Math.max(8, Math.round((total / maxHourCount) * 100));
                     const hourEventsCount = (eventsByHour.get(h.hour) ?? []).length;
+                    const statParts: string[] = [];
+                    if (h.refills > 0) statParts.push(`${h.refills} ref`);
+                    if (h.increases > 0) statParts.push(`+${h.increases}`);
+                    if (h.decreases > 0) statParts.push(`${h.decreases} dec`);
 
                     return (
                       <button
                         key={h.hour}
                         type="button"
+                        title={`View details for ${h.label}`}
                         onClick={() => openHourModal(h.hour)}
-                        className="min-h-12 w-full rounded-xl bg-white p-4 text-left transition-colors hover:bg-[#EFF6FF] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                        className="min-h-12 w-full rounded-lg bg-white px-3 py-2 text-left transition-colors hover:bg-[#EFF6FF] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-base">
-                          <span className="font-bold text-[#0A0A0A]">{h.label}</span>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-[#3F3F46]">
-                              {h.refills > 0 ? `${h.refills} refill(s)` : ""}{" "}
-                              {h.increases > 0 ? `+${h.increases} inc` : ""}{" "}
-                              {h.decreases > 0 ? `${h.decreases} dec` : ""}
-                            </span>
-                            <span className="rounded-lg bg-[#EFF6FF] px-3 py-1 text-base font-bold text-[#1447E6]">
-                              View Details ({hourEventsCount})
-                            </span>
-                          </div>
+                        <div className="flex items-center justify-between gap-2 text-base">
+                          <span className="font-bold text-[#0A0A0A]">
+                            {formatCompactHourLabel(h.hour)}
+                          </span>
+                          <span
+                            className={`shrink-0 rounded-md px-2 py-0.5 text-base font-bold ${
+                              h.openings > 0
+                                ? "bg-[#EFF6FF] text-[#1447E6]"
+                                : "bg-[#F4F4F5] text-[#3F3F46]"
+                            }`}
+                          >
+                            {statParts.join(" · ")} ({hourEventsCount})
+                          </span>
                         </div>
-                        <div className="mt-2 h-3 w-full overflow-hidden rounded-lg bg-[#F4F4F5]">
+                        <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-lg bg-[#F4F4F5]">
                           <div
-                            className={`h-3 rounded-lg ${
+                            className={`h-1.5 rounded-lg ${
                               h.openings > 0 ? "bg-[#1447E6]" : "bg-[#A1A1AA]"
                             }`}
                             style={{ width: `${pct}%` }}
