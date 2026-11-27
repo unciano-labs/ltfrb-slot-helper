@@ -463,4 +463,112 @@ describe("LTFRB normalizers and watch rules", () => {
       false
     );
   });
+
+  it("matches MUCEP AREA via regionCode while preventing cross-region matches on Any Point in the Region", () => {
+    const [ncrRegion] = normalizeRegionSlots([
+      {
+        region_id: "r-ncr",
+        region_code: "1300000000",
+        region_name: "National Capital Region (NCR)",
+        total_slots: 100,
+        remaining: 1,
+        filed_application: 99,
+        percentage: 99,
+        franchise_type: { code: "E_TNVS", name: "E-TNVS" },
+      },
+    ]);
+    const [reg8Region] = normalizeRegionSlots([
+      {
+        region_id: "r-8",
+        region_code: "0800000000",
+        region_name: "Region VIII (Eastern Visayas)",
+        total_slots: 200,
+        remaining: 0,
+        filed_application: 200,
+        percentage: 100,
+        franchise_type: { code: "E_TNVS", name: "E-TNVS" },
+      },
+    ]);
+    const [reg7Region] = normalizeRegionSlots([
+      {
+        region_id: "r-7",
+        region_code: "0700000000",
+        region_name: "Region VII (Central Visayas)",
+        total_slots: 200,
+        remaining: 5,
+        filed_application: 195,
+        percentage: 97.5,
+        franchise_type: { code: "E_TNVS", name: "E-TNVS" },
+      },
+    ]);
+
+    const [mucepProv] = normalizeProvinceSlots([
+      {
+        province_id: "p-mucep",
+        province_code: "1300000001",
+        province_name: "MUCEP AREA",
+        region_code: "1300000000",
+        region_name: "MUCEP AREA",
+        total_slots: 100,
+        remaining: 2,
+        filed_application: 98,
+        percentage: 98,
+        franchise_type: { code: "E_TNVS", name: "E-TNVS" },
+      },
+    ]);
+    const [reg7AnyPoint] = normalizeProvinceSlots([
+      {
+        province_id: "p-any-7",
+        province_code: "0700000003",
+        province_name: "Any Point in the Region",
+        region_code: "0700000000",
+        region_name: "Region VII (Central Visayas)",
+        total_slots: 200,
+        remaining: 5,
+        filed_application: 195,
+        percentage: 97.5,
+        franchise_type: { code: "E_TNVS", name: "E-TNVS" },
+      },
+    ]);
+
+    // NCR profile with MUCEP AREA must still match despite region_name mismatch on LTFRB province endpoint
+    const mucepDecision = shouldAutoSubmitProfile({
+      profile: {
+        is_armed: true,
+        lock_status: "idle",
+        franchise_type_code: "E_TNVS",
+        region_name: "National Capital Region (NCR)",
+        province_name: "MUCEP AREA",
+        number_of_units: 1,
+        submit_on_slot_increase: false,
+        submit_at_midnight: false,
+        submit_hourly: true,
+        last_attempted_at: null,
+      },
+      allSlots: [ncrRegion, mucepProv],
+      prevRemainingMap: new Map(),
+      now: new Date("2026-11-27T06:00:00Z"),
+    });
+    assert.equal(mucepDecision.shouldSubmit, true);
+
+    // Region VIII "Any Point in the Region" must NOT trigger when Region VII "Any Point in the Region" opens
+    const wrongRegionDecision = shouldAutoSubmitProfile({
+      profile: {
+        is_armed: true,
+        lock_status: "idle",
+        franchise_type_code: "E_TNVS",
+        region_name: "Region VIII (Eastern Visayas)",
+        province_name: "Any Point in the Region",
+        number_of_units: 1,
+        submit_on_slot_increase: false,
+        submit_at_midnight: false,
+        submit_hourly: true,
+        last_attempted_at: null,
+      },
+      allSlots: [reg8Region, reg7Region, reg7AnyPoint],
+      prevRemainingMap: new Map(),
+      now: new Date("2026-11-27T06:00:00Z"),
+    });
+    assert.equal(wrongRegionDecision.shouldSubmit, false);
+  });
 });

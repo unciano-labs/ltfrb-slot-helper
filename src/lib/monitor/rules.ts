@@ -158,10 +158,33 @@ function getMatchingSlotsForProfile(
     (slot) => slot.franchiseTypeCode === profile.franchise_type_code
   );
   if (profile.province_name) {
+    // Resolve canonical regionCode from region-level slots because LTFRB sometimes sets
+    // a different region_name on province slots (e.g. MUCEP AREA has region_code 1300000000 / NCR).
+    const targetRegionCode = byFranchise.find(
+      (slot) => slot.scope === "region" && slot.regionName === profile.region_name
+    )?.regionCode;
+
     const provinceMatches = byFranchise.filter(
       (slot) => slot.scope === "province" && slot.provinceName === profile.province_name
     );
-    if (provinceMatches.length > 0) return provinceMatches;
+
+    if (provinceMatches.length > 0) {
+      if (targetRegionCode) {
+        const regionCodeMatches = provinceMatches.filter(
+          (slot) => slot.regionCode === targetRegionCode
+        );
+        if (regionCodeMatches.length > 0) return regionCodeMatches;
+        // If another region's slot had the same generic name (e.g. "Any Point in the Region"),
+        // fall through to region-level matching rather than cross-matching the wrong region.
+      } else {
+        const distinctRegions = new Set(provinceMatches.map((s) => s.regionCode).filter(Boolean));
+        if (distinctRegions.size <= 1) return provinceMatches;
+        const exactNameMatches = provinceMatches.filter(
+          (slot) => slot.regionName === profile.region_name
+        );
+        if (exactNameMatches.length > 0) return exactNameMatches;
+      }
+    }
   }
   return byFranchise.filter(
     (slot) => slot.scope === "region" && slot.regionName === profile.region_name
