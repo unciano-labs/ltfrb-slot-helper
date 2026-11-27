@@ -2,9 +2,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   authenticateLtfrbAccount,
   submitOperatorApplication,
+  uploadLtfrbDocument,
+  VEHICLE_DOCS_STORAGE_BUCKET,
+  verifyDocumentUrlAccessible,
   type SubmissionOutcomeType,
 } from "@/lib/ltfrb/client";
-import type { ApplicationProfile } from "@/lib/ltfrb/types";
+import type { ApplicationProfile, UnitDocumentKey, VehicleUnitInput } from "@/lib/ltfrb/types";
 import { sendSubmissionOutcomeEmail } from "@/lib/notifications/email";
 import { decryptSecret, encryptSecret } from "@/lib/security/crypto";
 import { getTenantContext } from "@/lib/supabase/server";
@@ -22,6 +25,9 @@ export interface ReservationDeps {
   submitApplication: typeof submitOperatorApplication;
   authenticateAccount: typeof authenticateLtfrbAccount;
   sendSubmissionEmail: typeof sendSubmissionOutcomeEmail;
+  verifyDocumentUrl: (url: string) => Promise<boolean>;
+  downloadBackupPdf: (storagePath: string) => Promise<{ blob: Blob; filename: string } | null>;
+  uploadDocument: typeof uploadLtfrbDocument;
   decrypt: (payload: string) => string;
   encrypt: (plaintext: string) => string;
 }
@@ -31,9 +37,29 @@ const DEFAULT_DEPS: ReservationDeps = {
   submitApplication: submitOperatorApplication,
   authenticateAccount: authenticateLtfrbAccount,
   sendSubmissionEmail: sendSubmissionOutcomeEmail,
+  verifyDocumentUrl: verifyDocumentUrlAccessible,
+  downloadBackupPdf: async (storagePath: string) => {
+    const { supabase } = getTenantContext();
+    const { data, error } = await supabase.storage
+      .from(VEHICLE_DOCS_STORAGE_BUCKET)
+      .download(storagePath);
+    if (error || !data) return null;
+    const filename = storagePath.split("/").pop() || "document.pdf";
+    return { blob: data, filename };
+  },
+  uploadDocument: uploadLtfrbDocument,
   decrypt: (p) => decryptSecret(p),
   encrypt: (p) => encryptSecret(p),
 };
+
+const ALL_DOCUMENT_KEYS: UnitDocumentKey[] = [
+  "sales_invoice_file",
+  "or_file",
+  "cr_file",
+  "affidavit_file",
+  "delivery_receipt",
+  "unit_photo_file",
+];
 
 export async function attemptSlotReservation(
   params: { profileId: string; userId?: string },
@@ -179,10 +205,152 @@ export async function attemptSlotReservation(
       token = refreshed.token;
     }
 
-    const normalizedUnits = (profile.units ?? []).map((u) => {
+    // Ensure every uploaded PDF URL is still valid (not expired on LTFRB S3).
+    // If any URL returns AccessDenied/expired, re-upload our private Supabase backup copy first!
+    const workingUnits: VehicleUnitInput[] = (profile.units ?? []).map((u) => ({
+      ...u,
+      documents: { ...(u.documents ?? {}) },
+      document_storage_paths: { ...(u.document_storage_paths ?? {}) },
+    }));
+    let unitsRefreshed = false;
+
+    for (let i = 0; i < workingUnits.length; i += 1) {
+      const unit = workingUnits[i];
+      const docs = unit.documents ?? {};
+      const paths = unit.document_storage_paths ?? {};
+
+      for (const docKey of ALL_DOCUMENT_KEYS) {
+        const currentUrl = docs[docKey];
+        if (!currentUrl || typeof currentUrl !== "string" || !currentUrl.trim()) continue;
+
+        const isValid = await deps.verifyDocumentUrl(currentUrl);
+        if (isValid) continue;
+
+        const backupPath = paths[docKey];
+        if (!backupPath) {
+          const unitLabel = workingUnits.length > 1 ? `Unit ${i + 1} ` : "";
+          const msg = `${unitLabel}uploaded PDF (${docKey}) expired on LTFRB and no backup copy exists. Please open Auto-Reserve and re-upload that PDF once so future submissions can auto-refresh it.`;
+          await supabase.from("ltfrb_submission_logs").insert({
+            website_id: websiteId,
+            user_id: profile.user_id,
+            application_profile_id: profile.id,
+            watch_rule_id: profile.watch_rule_id,
+            result: "validation_error",
+            message: msg,
+          });
+          await releaseLock("idle", { is_armed: false, last_error: msg });
+          const notifyAddr = profile.notify_email || (accountRow.ltfrb_email as string);
+          if (notifyAddr) {
+            await deps.sendSubmissionEmail({
+              to: notifyAddr,
+              profileName: profile.profile_name,
+              franchiseTypeCode: profile.franchise_type_code,
+              regionName: profile.region_name,
+              provinceName: profile.province_name,
+              result: "validation_error",
+              httpStatus: null,
+              message: msg,
+              referenceNumber: null,
+              attemptedAtIso: new Date().toISOString(),
+            });
+          }
+          return {
+            profileId: profile.id,
+            profileName: profile.profile_name,
+            result: "validation_error",
+            message: msg,
+            referenceNumber: null,
+          };
+        }
+
+        const backup = await deps.downloadBackupPdf(backupPath);
+        if (!backup) {
+          const unitLabel = workingUnits.length > 1 ? `Unit ${i + 1} ` : "";
+          const msg = `${unitLabel}backup PDF (${docKey}) could not be read from storage. Please re-upload the PDF under Auto-Reserve.`;
+          await supabase.from("ltfrb_submission_logs").insert({
+            website_id: websiteId,
+            user_id: profile.user_id,
+            application_profile_id: profile.id,
+            watch_rule_id: profile.watch_rule_id,
+            result: "validation_error",
+            message: msg,
+          });
+          await releaseLock("idle", { is_armed: false, last_error: msg });
+          return {
+            profileId: profile.id,
+            profileName: profile.profile_name,
+            result: "validation_error",
+            message: msg,
+            referenceNumber: null,
+          };
+        }
+
+        let reupload = await deps.uploadDocument({
+          token,
+          file: backup.blob,
+          filename: backup.filename,
+        });
+
+        if (!reupload.ok && (reupload.httpStatus === 401 || reupload.httpStatus === 403)) {
+          const refreshed = await refreshToken();
+          if (refreshed.ok && refreshed.token) {
+            token = refreshed.token;
+            reupload = await deps.uploadDocument({
+              token,
+              file: backup.blob,
+              filename: backup.filename,
+            });
+          }
+        }
+
+        if (!reupload.ok || !reupload.url) {
+          const outcomeType =
+            reupload.httpStatus === 401 || reupload.httpStatus === 403
+              ? "auth_error"
+              : "network_error";
+          const msg = `Could not re-upload expired ${docKey} to LTFRB before submitting: ${reupload.message}`;
+          await supabase.from("ltfrb_submission_logs").insert({
+            website_id: websiteId,
+            user_id: profile.user_id,
+            application_profile_id: profile.id,
+            watch_rule_id: profile.watch_rule_id,
+            http_status: reupload.httpStatus,
+            result: outcomeType,
+            message: msg,
+          });
+          await releaseLock("idle", { last_error: msg });
+          return {
+            profileId: profile.id,
+            profileName: profile.profile_name,
+            result: outcomeType,
+            message: msg,
+            referenceNumber: null,
+          };
+        }
+
+        docs[docKey] = reupload.url;
+        unit.documents = docs;
+        unitsRefreshed = true;
+      }
+    }
+
+    if (unitsRefreshed) {
+      await supabase
+        .from("ltfrb_application_profiles")
+        .update({
+          units: workingUnits,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", profile.id)
+        .eq("website_id", websiteId);
+    }
+
+    const normalizedUnits = workingUnits.map((u) => {
+      const { document_storage_paths: _omitPaths, ...rest } = u;
+      void _omitPaths;
       const docs = u.documents ?? {};
       return {
-        ...u,
+        ...rest,
         engine_number: (u.engine_number ?? "").trim(),
         body_type: u.body_type || "Sedan",
         documents: {

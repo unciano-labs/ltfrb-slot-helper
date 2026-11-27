@@ -1,6 +1,11 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/env";
-import { authenticateLtfrbAccount, uploadLtfrbDocument } from "@/lib/ltfrb/client";
+import {
+  authenticateLtfrbAccount,
+  uploadLtfrbDocument,
+  VEHICLE_DOCS_STORAGE_BUCKET,
+} from "@/lib/ltfrb/client";
 import { decryptSecret, encryptSecret } from "@/lib/security/crypto";
 import { getAuthenticatedUser } from "@/lib/supabase/auth-server";
 import { getTenantContext } from "@/lib/supabase/server";
@@ -8,6 +13,18 @@ import { getTenantContext } from "@/lib/supabase/server";
 export const dynamic = "force-dynamic";
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5 MB (LTFRB limit)
+
+async function ensurePrivatePdfBucket(supabase: SupabaseClient): Promise<void> {
+  const { data: buckets } = await supabase.storage.listBuckets();
+  const exists = (buckets ?? []).some((b) => b.name === VEHICLE_DOCS_STORAGE_BUCKET);
+  if (!exists) {
+    await supabase.storage.createBucket(VEHICLE_DOCS_STORAGE_BUCKET, {
+      public: false,
+      fileSizeLimit: MAX_FILE_BYTES,
+      allowedMimeTypes: ["application/pdf"],
+    });
+  }
+}
 
 export async function POST(request: NextRequest) {
   const user = await getAuthenticatedUser();
@@ -60,6 +77,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Save a private durable copy in Supabase Storage so expired LTFRB S3 URLs can always be viewed & auto-reuploaded
+  await ensurePrivatePdfBucket(supabase);
+  const safeName = (file.name || "document.pdf")
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .slice(0, 80);
+  const storagePath = `${websiteId}/${user.id}/${Date.now()}-${safeName.endsWith(".pdf") ? safeName : `${safeName}.pdf`}`;
+  const pdfBuffer = Buffer.from(await file.arrayBuffer());
+
+  const { error: backupErr } = await supabase.storage
+    .from(VEHICLE_DOCS_STORAGE_BUCKET)
+    .upload(storagePath, pdfBuffer, {
+      contentType: "application/pdf",
+      upsert: false,
+    });
+
+  if (backupErr) {
+    return NextResponse.json(
+      { error: `Could not back up PDF securely: ${backupErr.message}` },
+      { status: 500 }
+    );
+  }
+
   const refreshToken = async (): Promise<{ ok: boolean; token?: string; message?: string }> => {
     const password = decryptSecret(accountRow.encrypted_password as string);
     const auth = await authenticateLtfrbAccount({
@@ -96,10 +135,11 @@ export async function POST(request: NextRequest) {
     token = auth.token;
   }
 
+  const freshBlob = new Blob([pdfBuffer], { type: "application/pdf" });
   let upload = await uploadLtfrbDocument({
     token,
-    file,
-    filename: file.name || "document.pdf",
+    file: freshBlob,
+    filename: safeName,
   });
 
   if (!upload.ok && (upload.httpStatus === 401 || upload.httpStatus === 403)) {
@@ -107,15 +147,20 @@ export async function POST(request: NextRequest) {
     if (auth.ok && auth.token) {
       upload = await uploadLtfrbDocument({
         token: auth.token,
-        file,
-        filename: file.name || "document.pdf",
+        file: freshBlob,
+        filename: safeName,
       });
     }
   }
 
   if (!upload.ok || !upload.url) {
+    await supabase.storage.from(VEHICLE_DOCS_STORAGE_BUCKET).remove([storagePath]);
     return NextResponse.json({ error: upload.message }, { status: 502 });
   }
 
-  return NextResponse.json({ ok: true, url: upload.url });
+  return NextResponse.json({
+    ok: true,
+    url: upload.url,
+    storagePath,
+  });
 }

@@ -10,6 +10,7 @@ import type {
 } from "@/lib/ltfrb/types";
 
 export const LTFRB_API_BASE = "https://ws.ltfrb-foa.ph";
+export const VEHICLE_DOCS_STORAGE_BUCKET = "ltfrb-vehicle-docs";
 const REQUEST_TIMEOUT_MS = 12_000;
 const FRANCHISE_TYPES_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
@@ -527,6 +528,84 @@ export async function uploadLtfrbDocument(params: {
       httpStatus: null,
       message: err instanceof Error ? err.message : "Could not upload document to LTFRB.",
     };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Checks whether an AWS S3 pre-signed URL (`X-Amz-Date` + `X-Amz-Expires`) is already
+ * expired or will expire within `bufferMs`.
+ */
+export function isPresignedS3UrlExpired(
+  url: string,
+  nowMs: number = Date.now(),
+  bufferMs: number = 120_000
+): boolean {
+  try {
+    const parsed = new URL(url);
+    let amzDate: string | null = null;
+    let amzExpires: string | null = null;
+
+    for (const [k, v] of parsed.searchParams.entries()) {
+      const lower = k.toLowerCase();
+      if (lower === "x-amz-date") amzDate = v;
+      if (lower === "x-amz-expires") amzExpires = v;
+    }
+
+    if (!amzDate || !amzExpires) return false;
+    const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/i.exec(amzDate.trim());
+    if (!match) return false;
+
+    const signedAtMs = Date.UTC(
+      Number(match[1]),
+      Number(match[2]) - 1,
+      Number(match[3]),
+      Number(match[4]),
+      Number(match[5]),
+      Number(match[6])
+    );
+    const ttlSeconds = Number(amzExpires);
+    if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) return true;
+
+    const expiresAtMs = signedAtMs + ttlSeconds * 1000;
+    return expiresAtMs <= nowMs + bufferMs;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Verifies that a remote document URL (such as an LTFRB S3 pre-signed PDF URL)
+ * is still non-expired and accessible via HTTP before attempting application submission.
+ */
+export async function verifyDocumentUrlAccessible(url: string): Promise<boolean> {
+  if (!url || !/^https?:\/\//i.test(url)) return false;
+  if (isPresignedS3UrlExpired(url)) return false;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const headRes = await fetch(url, {
+      method: "HEAD",
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    if (headRes.ok) return true;
+
+    if (headRes.status === 405) {
+      const rangeRes = await fetch(url, {
+        method: "GET",
+        headers: { Range: "bytes=0-0" },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      return rangeRes.ok;
+    }
+
+    return false;
+  } catch {
+    return false;
   } finally {
     clearTimeout(timer);
   }

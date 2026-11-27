@@ -6,6 +6,7 @@ import type {
   FranchiseType,
   LtfrbOptionItem,
   SubmissionLogRow,
+  UnitDocumentKey,
   UnitDocuments,
   VehicleUnitInput,
 } from "@/lib/ltfrb/types";
@@ -35,6 +36,14 @@ interface UnitDraft {
   sales_invoice_file: string | null;
   or_file: string | null;
   cr_file: string | null;
+  document_storage_paths: Partial<Record<UnitDocumentKey, string | null>>;
+}
+
+function getViewPdfHref(ltfrbUrl: string | null | undefined, storagePath?: string | null): string {
+  if (storagePath) {
+    return `/api/ltfrb/document?path=${encodeURIComponent(storagePath)}`;
+  }
+  return ltfrbUrl || "#";
 }
 
 function createEmptyUnitDraft(requiresEvType: boolean): UnitDraft {
@@ -51,6 +60,7 @@ function createEmptyUnitDraft(requiresEvType: boolean): UnitDraft {
     sales_invoice_file: null,
     or_file: null,
     cr_file: null,
+    document_storage_paths: {},
   };
 }
 
@@ -68,6 +78,7 @@ function unitInputToDraft(u: VehicleUnitInput, requiresEvType: boolean): UnitDra
     sales_invoice_file: u.documents?.sales_invoice_file ?? null,
     or_file: u.documents?.or_file ?? null,
     cr_file: u.documents?.cr_file ?? null,
+    document_storage_paths: { ...(u.document_storage_paths ?? {}) },
   };
 }
 
@@ -205,18 +216,23 @@ export default function AutoReserveTab({
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  async function uploadPdfFile(file: File): Promise<string> {
+  async function uploadPdfFile(file: File): Promise<{ url: string; storagePath: string | null }> {
     const formData = new FormData();
     formData.append("file", file);
     const res = await fetch("/api/ltfrb/upload", {
       method: "POST",
       body: formData,
     });
-    const json = (await res.json()) as { ok?: boolean; url?: string; error?: string };
+    const json = (await res.json()) as {
+      ok?: boolean;
+      url?: string;
+      storagePath?: string | null;
+      error?: string;
+    };
     if (!res.ok || !json.url) {
       throw new Error(json.error || "Could not upload PDF file to LTFRB.");
     }
-    return json.url;
+    return { url: json.url, storagePath: json.storagePath ?? null };
   }
 
   async function handleFormFileChange(
@@ -227,11 +243,24 @@ export default function AutoReserveTab({
     if (!file) return;
     setUploadingKey(`form:${unitIndex}:${docKey}`);
     try {
-      const url = await uploadPdfFile(file);
-      updateUnitField(unitIndex, docKey, url);
+      const uploaded = await uploadPdfFile(file);
+      setUnitsDraft((prev) =>
+        prev.map((unit, idx) =>
+          idx === unitIndex
+            ? {
+                ...unit,
+                [docKey]: uploaded.url,
+                document_storage_paths: {
+                  ...unit.document_storage_paths,
+                  [docKey]: uploaded.storagePath,
+                },
+              }
+            : unit
+        )
+      );
       onBanner({
         kind: "success",
-        text: `Unit ${unitIndex + 1} PDF uploaded and ready for your application.`,
+        text: `Unit ${unitIndex + 1} PDF uploaded and backed up cleanly for automatic re-upload if needed.`,
       });
     } catch (err) {
       onBanner({
@@ -251,13 +280,17 @@ export default function AutoReserveTab({
     if (!file) return;
     setUploadingKey(`${profile.id}:${docField}`);
     try {
-      const url = await uploadPdfFile(file);
+      const uploaded = await uploadPdfFile(file);
       const currentUnits = [...(profile.units ?? [])];
       const firstUnit = {
         ...(currentUnits[0] ?? {}),
         documents: {
           ...(currentUnits[0]?.documents ?? {}),
-          [docField]: url,
+          [docField]: uploaded.url,
+        },
+        document_storage_paths: {
+          ...(currentUnits[0]?.document_storage_paths ?? {}),
+          [docField]: uploaded.storagePath,
         },
       };
       currentUnits[0] = firstUnit;
@@ -419,6 +452,7 @@ export default function AutoReserveTab({
           ...(u.engine_number.trim() ? { engine_number: u.engine_number.trim() } : {}),
           chassis_number: u.chassis_number.trim(),
           documents,
+          document_storage_paths: u.document_storage_paths,
         };
       });
 
@@ -1014,7 +1048,10 @@ export default function AutoReserveTab({
                                   PDF Uploaded
                                 </span>
                                 <a
-                                  href={doc.url}
+                                  href={getViewPdfHref(
+                                    doc.url,
+                                    unit.document_storage_paths?.[doc.key]
+                                  )}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="inline-flex min-h-12 items-center rounded-xl bg-[#EEF1F4] px-4 py-2.5 text-base font-bold text-[#17191C] hover:bg-[#E2E6EB]"
@@ -1023,7 +1060,22 @@ export default function AutoReserveTab({
                                 </a>
                                 <button
                                   type="button"
-                                  onClick={() => updateUnitField(idx, doc.key, null)}
+                                  onClick={() =>
+                                    setUnitsDraft((prev) =>
+                                      prev.map((item, i) =>
+                                        i === idx
+                                          ? {
+                                              ...item,
+                                              [doc.key]: null,
+                                              document_storage_paths: {
+                                                ...item.document_storage_paths,
+                                                [doc.key]: null,
+                                              },
+                                            }
+                                          : item
+                                      )
+                                    )
+                                  }
                                   className="min-h-12 rounded-xl bg-[#FEE2E2] px-4 py-2.5 text-base font-bold text-[#7F1D1D] hover:bg-[#FECACA]"
                                 >
                                   Remove
@@ -1195,6 +1247,7 @@ export default function AutoReserveTab({
               const isSubmitted = profile.lock_status === "submitted";
               const unit0 = profile.units?.[0];
               const docs = unit0?.documents;
+              const paths0 = unit0?.document_storage_paths;
               const unitCount = profile.number_of_units || profile.units?.length || 1;
               const needsEv =
                 (profile.franchise_type_code === "E_TNVS" ||
@@ -1250,33 +1303,53 @@ export default function AutoReserveTab({
                         </div>
                       )}
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <span
-                          className={`inline-block rounded-lg px-3 py-1.5 text-base font-bold ${
-                            docs?.sales_invoice_file
-                              ? "bg-[#DCFCE7] text-[#14532D]"
-                              : "bg-white text-[#4B5563]"
-                          }`}
-                        >
-                          {docs?.sales_invoice_file ? "Sales Invoice: Ready" : "Sales Invoice: None"}
-                        </span>
-                        <span
-                          className={`inline-block rounded-lg px-3 py-1.5 text-base font-bold ${
-                            docs?.or_file
-                              ? "bg-[#DCFCE7] text-[#14532D]"
-                              : "bg-white text-[#4B5563]"
-                          }`}
-                        >
-                          {docs?.or_file ? "OR: Ready" : "OR: Add Later"}
-                        </span>
-                        <span
-                          className={`inline-block rounded-lg px-3 py-1.5 text-base font-bold ${
-                            docs?.cr_file
-                              ? "bg-[#DCFCE7] text-[#14532D]"
-                              : "bg-white text-[#4B5563]"
-                          }`}
-                        >
-                          {docs?.cr_file ? "CR: Ready" : "CR: Add Later"}
-                        </span>
+                        {docs?.sales_invoice_file ? (
+                          <a
+                            href={getViewPdfHref(
+                              docs.sales_invoice_file,
+                              paths0?.sales_invoice_file
+                            )}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-block rounded-lg bg-[#DCFCE7] px-3 py-1.5 text-base font-bold text-[#14532D] hover:bg-[#BBF7D0]"
+                          >
+                            Sales Invoice: Ready (View PDF)
+                          </a>
+                        ) : (
+                          <span className="inline-block rounded-lg bg-white px-3 py-1.5 text-base font-bold text-[#4B5563]">
+                            Sales Invoice: None
+                          </span>
+                        )}
+
+                        {docs?.or_file ? (
+                          <a
+                            href={getViewPdfHref(docs.or_file, paths0?.or_file)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-block rounded-lg bg-[#DCFCE7] px-3 py-1.5 text-base font-bold text-[#14532D] hover:bg-[#BBF7D0]"
+                          >
+                            OR: Ready (View PDF)
+                          </a>
+                        ) : (
+                          <span className="inline-block rounded-lg bg-white px-3 py-1.5 text-base font-bold text-[#4B5563]">
+                            OR: Add Later
+                          </span>
+                        )}
+
+                        {docs?.cr_file ? (
+                          <a
+                            href={getViewPdfHref(docs.cr_file, paths0?.cr_file)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-block rounded-lg bg-[#DCFCE7] px-3 py-1.5 text-base font-bold text-[#14532D] hover:bg-[#BBF7D0]"
+                          >
+                            CR: Ready (View PDF)
+                          </a>
+                        ) : (
+                          <span className="inline-block rounded-lg bg-white px-3 py-1.5 text-base font-bold text-[#4B5563]">
+                            CR: Add Later
+                          </span>
+                        )}
                       </div>
                       {profile.submitted_reference && (
                         <p className="mt-2 text-lg font-bold text-[#14532D]">

@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { describe, it } from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { validateApplicationUnits } from "@/lib/ltfrb/client";
+import {
+  isPresignedS3UrlExpired,
+  validateApplicationUnits,
+} from "@/lib/ltfrb/client";
 import { attemptSlotReservation, type ReservationDeps } from "@/lib/ltfrb/reservation";
 import type { ApplicationProfile } from "@/lib/ltfrb/types";
 import { decryptSecret, encryptSecret } from "@/lib/security/crypto";
@@ -133,6 +136,14 @@ function makeDeps(
       rawResponse: {},
     }),
     sendSubmissionEmail: async () => ({ sent: true, providerId: "msg-1" }),
+    verifyDocumentUrl: async () => true,
+    downloadBackupPdf: async () => null,
+    uploadDocument: async () => ({
+      ok: true,
+      httpStatus: 200,
+      url: "https://ltfrb-foa-prod.s3.ap-southeast-1.amazonaws.com/fresh.pdf",
+      message: "Uploaded",
+    }),
     ...overrides,
   };
 }
@@ -426,5 +437,95 @@ describe("atomic slot reservation lock and outcomes", () => {
       requireDocuments: true,
     });
     assert.equal(optionalEngine.valid, true);
+  });
+
+  it("detects expired AWS S3 pre-signed URLs and auto-reuploads from backup before submitting", async () => {
+    const expiredUrl =
+      "https://ltfrb-foa-prod.s3.ap-southeast-1.amazonaws.com/transaction_documents/old.pdf?X-Amz-Date=20261126T000000Z&X-Amz-Expires=3600";
+    const freshUrl =
+      "https://ltfrb-foa-prod.s3.ap-southeast-1.amazonaws.com/transaction_documents/fresh-2026.pdf?X-Amz-Date=20261127T080000Z&X-Amz-Expires=3600";
+
+    assert.equal(
+      isPresignedS3UrlExpired(expiredUrl, Date.UTC(2026, 10, 26, 2, 0, 0)),
+      true
+    );
+    assert.equal(
+      isPresignedS3UrlExpired(freshUrl, Date.UTC(2026, 10, 27, 8, 5, 0)),
+      false
+    );
+
+    const state = baseState();
+    state.profile.units[0].documents = {
+      sales_invoice_file: expiredUrl,
+    };
+    state.profile.units[0].document_storage_paths = {
+      sales_invoice_file: "site-1/user-1/si-backup.pdf",
+    };
+
+    let reuploadedCount = 0;
+    let submittedUrl: string | null | undefined = null;
+
+    const deps = makeDeps(state, {
+      verifyDocumentUrl: async (url) => url === freshUrl,
+      downloadBackupPdf: async (storagePath) => {
+        assert.equal(storagePath, "site-1/user-1/si-backup.pdf");
+        return { blob: new Blob(["%PDF-1.4"], { type: "application/pdf" }), filename: "si.pdf" };
+      },
+      uploadDocument: async () => {
+        reuploadedCount++;
+        return { ok: true, httpStatus: 200, url: freshUrl, message: "Uploaded" };
+      },
+      submitApplication: async (_token, payload) => {
+        submittedUrl = payload.units[0]?.documents?.sales_invoice_file;
+        assert.equal("document_storage_paths" in payload.units[0], false);
+        return {
+          httpStatus: 201,
+          result: "success",
+          message: "Submitted with fresh PDF",
+          referenceNumber: "CASE-REFRESHED-1",
+          rawResponse: {},
+        };
+      },
+    });
+
+    const outcome = await attemptSlotReservation(
+      { profileId: "prof-1", userId: "user-1" },
+      deps
+    );
+
+    assert.equal(outcome.result, "success");
+    assert.equal(reuploadedCount, 1);
+    assert.equal(submittedUrl, freshUrl);
+    assert.equal(state.profile.units[0].documents?.sales_invoice_file, freshUrl);
+  });
+
+  it("aborts submission safely if an uploaded PDF URL expired and has no backup copy", async () => {
+    const state = baseState();
+    let submitCalled = false;
+
+    const deps = makeDeps(state, {
+      verifyDocumentUrl: async () => false,
+      submitApplication: async () => {
+        submitCalled = true;
+        return {
+          httpStatus: 201,
+          result: "success",
+          message: "Should not run",
+          referenceNumber: "CASE-NONE",
+          rawResponse: {},
+        };
+      },
+    });
+
+    const outcome = await attemptSlotReservation(
+      { profileId: "prof-1", userId: "user-1" },
+      deps
+    );
+
+    assert.equal(submitCalled, false);
+    assert.equal(outcome.result, "validation_error");
+    assert.equal(state.profile.lock_status, "idle");
+    assert.equal(state.profile.is_armed, false);
+    assert.match(outcome.message, /expired/i);
   });
 });

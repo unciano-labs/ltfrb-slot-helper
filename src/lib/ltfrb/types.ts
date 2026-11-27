@@ -71,6 +71,8 @@ export interface UnitDocuments {
   unit_photo_file?: string | null;
 }
 
+export type UnitDocumentKey = keyof UnitDocuments;
+
 export interface VehicleUnitInput {
   plate_number: string;
   mv_file_number: string;
@@ -83,6 +85,7 @@ export interface VehicleUnitInput {
   chassis_number: string;
   color?: string;
   documents?: UnitDocuments;
+  document_storage_paths?: Partial<Record<UnitDocumentKey, string | null>>;
 }
 
 export interface ApplicationProfile {
