@@ -131,7 +131,180 @@ export default function AutoReserveTab({
   const [saving, setSaving] = useState(false);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [draftHydrated, setDraftHydrated] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+
+  const draftStorageKey = `ltfrb_reserve_draft:${(userEmail ?? "anon").toLowerCase()}`;
+
+  function serializeUnitsDraft(drafts: UnitDraft[]): VehicleUnitInput[] {
+    return drafts.map((u) => {
+      const documents: UnitDocuments = {
+        sales_invoice_file: u.sales_invoice_file,
+        or_file: u.or_file,
+        cr_file: u.cr_file,
+      };
+      return {
+        plate_number: u.plate_number.trim().toUpperCase(),
+        mv_file_number: u.mv_file_number.trim(),
+        make: u.make.trim(),
+        series: u.series.trim(),
+        year_model: Number(u.year_model) || new Date().getFullYear(),
+        body_type: u.body_type.trim() || "Sedan",
+        ...(u.ev_type ? { ev_type: u.ev_type } : {}),
+        ...(u.engine_number.trim() ? { engine_number: u.engine_number.trim() } : {}),
+        chassis_number: u.chassis_number.trim(),
+        documents,
+        document_storage_paths: u.document_storage_paths,
+      };
+    });
+  }
+
+  function clearSavedDraft() {
+    try {
+      window.localStorage.removeItem(draftStorageKey);
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  useEffect(() => {
+    if (editingProfileId || draftHydrated) return;
+    try {
+      const raw = window.localStorage.getItem(draftStorageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw) as {
+          profileName?: string;
+          franchiseTypeCode?: string;
+          isFleet?: boolean;
+          selectedRegionId?: string;
+          selectedProvinceId?: string;
+          selectedRouteId?: string;
+          notifyEmail?: string;
+          armImmediately?: boolean;
+          submitOnIncrease?: boolean;
+          submitAtMidnight?: boolean;
+          submitHourly?: boolean;
+          unitsDraft?: UnitDraft[];
+        };
+        const hasUnitsData =
+          Array.isArray(parsed.unitsDraft) &&
+          parsed.unitsDraft.some(
+            (u) =>
+              Boolean(u.plate_number?.trim()) ||
+              Boolean(u.sales_invoice_file) ||
+              Boolean(u.or_file) ||
+              Boolean(u.cr_file)
+          );
+        if (hasUnitsData && parsed.unitsDraft) {
+          if (typeof parsed.profileName === "string") setProfileName(parsed.profileName);
+          if (
+            typeof parsed.franchiseTypeCode === "string" &&
+            (monitoredFranchiseCodes.length === 0 ||
+              monitoredFranchiseCodes.includes(parsed.franchiseTypeCode))
+          ) {
+            setFranchiseTypeCode(parsed.franchiseTypeCode);
+          }
+          if (typeof parsed.isFleet === "boolean") setIsFleet(parsed.isFleet);
+          if (typeof parsed.selectedRegionId === "string")
+            setSelectedRegionId(parsed.selectedRegionId);
+          if (typeof parsed.selectedProvinceId === "string")
+            setSelectedProvinceId(parsed.selectedProvinceId);
+          if (typeof parsed.selectedRouteId === "string")
+            setSelectedRouteId(parsed.selectedRouteId);
+          if (typeof parsed.notifyEmail === "string" && parsed.notifyEmail)
+            setNotifyEmail(parsed.notifyEmail);
+          if (typeof parsed.armImmediately === "boolean") setArmImmediately(parsed.armImmediately);
+          if (typeof parsed.submitOnIncrease === "boolean")
+            setSubmitOnIncrease(parsed.submitOnIncrease);
+          if (typeof parsed.submitAtMidnight === "boolean")
+            setSubmitAtMidnight(parsed.submitAtMidnight);
+          if (typeof parsed.submitHourly === "boolean") setSubmitHourly(parsed.submitHourly);
+          setUnitsDraft(parsed.unitsDraft);
+        }
+      }
+    } catch {
+      // Ignore malformed draft
+    } finally {
+      setDraftHydrated(true);
+    }
+  }, [draftHydrated, draftStorageKey, editingProfileId, monitoredFranchiseCodes]);
+
+  useEffect(() => {
+    if (!draftHydrated || editingProfileId) return;
+    try {
+      const hasContent =
+        Boolean(profileName.trim()) ||
+        Boolean(selectedRegionId) ||
+        unitsDraft.some(
+          (u) =>
+            Boolean(u.plate_number.trim()) ||
+            Boolean(u.mv_file_number.trim()) ||
+            Boolean(u.sales_invoice_file) ||
+            Boolean(u.or_file) ||
+            Boolean(u.cr_file)
+        );
+      if (!hasContent) {
+        window.localStorage.removeItem(draftStorageKey);
+        return;
+      }
+      window.localStorage.setItem(
+        draftStorageKey,
+        JSON.stringify({
+          profileName,
+          franchiseTypeCode,
+          isFleet,
+          selectedRegionId,
+          selectedProvinceId,
+          selectedRouteId,
+          notifyEmail,
+          armImmediately,
+          submitOnIncrease,
+          submitAtMidnight,
+          submitHourly,
+          unitsDraft,
+        })
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [
+    armImmediately,
+    draftHydrated,
+    draftStorageKey,
+    editingProfileId,
+    franchiseTypeCode,
+    isFleet,
+    notifyEmail,
+    profileName,
+    selectedProvinceId,
+    selectedRegionId,
+    selectedRouteId,
+    submitAtMidnight,
+    submitHourly,
+    submitOnIncrease,
+    unitsDraft,
+  ]);
+
+  async function persistUnitsIfEditing(nextDrafts: UnitDraft[]): Promise<boolean> {
+    if (!editingProfileId) return false;
+    try {
+      const res = await fetch("/api/reservation/profiles", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingProfileId,
+          units: serializeUnitsDraft(nextDrafts),
+          number_of_units: nextDrafts.length,
+          is_fleet: isFleet,
+        }),
+      });
+      if (!res.ok) return false;
+      await onRefresh();
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   function resizeUnitsCount(nextCount: number) {
     const clamped = Math.max(1, Math.min(50, Math.floor(nextCount)));
@@ -169,6 +342,7 @@ export default function AutoReserveTab({
   }
 
   function resetFormToNew() {
+    clearSavedDraft();
     const initialCode = monitoredFranchiseCodes[0] ?? "";
     const initialEv = initialCode === "E_TNVS" || initialCode === "EVT";
     setEditingProfileId(null);
@@ -238,23 +412,25 @@ export default function AutoReserveTab({
     setUploadingKey(`form:${unitIndex}:${docKey}`);
     try {
       const uploaded = await uploadPdfFile(file);
-      setUnitsDraft((prev) =>
-        prev.map((unit, idx) =>
-          idx === unitIndex
-            ? {
-                ...unit,
-                [docKey]: uploaded.url,
-                document_storage_paths: {
-                  ...unit.document_storage_paths,
-                  [docKey]: uploaded.storagePath,
-                },
-              }
-            : unit
-        )
+      const nextDrafts = unitsDraft.map((unit, idx) =>
+        idx === unitIndex
+          ? {
+              ...unit,
+              [docKey]: uploaded.url,
+              document_storage_paths: {
+                ...unit.document_storage_paths,
+                [docKey]: uploaded.storagePath,
+              },
+            }
+          : unit
       );
+      setUnitsDraft(nextDrafts);
+      const persisted = await persistUnitsIfEditing(nextDrafts);
       onBanner({
         kind: "success",
-        text: `Unit ${unitIndex + 1} PDF uploaded and backed up cleanly for automatic re-upload if needed.`,
+        text: persisted
+          ? `Unit ${unitIndex + 1} PDF uploaded and saved to your profile.`
+          : `Unit ${unitIndex + 1} PDF uploaded! Click "Save Reservation Profile" below when you finish filling out the form.`,
       });
     } catch (err) {
       onBanner({
@@ -330,7 +506,11 @@ export default function AutoReserveTab({
       if (!res.ok || !json.url) {
         throw new Error(json.error || "Could not refresh LTFRB S3 link.");
       }
-      updateUnitField(unitIndex, docKey, json.url);
+      const nextDrafts = unitsDraft.map((unit, idx) =>
+        idx === unitIndex ? { ...unit, [docKey]: json.url as string } : unit
+      );
+      setUnitsDraft(nextDrafts);
+      await persistUnitsIfEditing(nextDrafts);
       onBanner({
         kind: "success",
         text: `Unit ${unitIndex + 1} LTFRB S3 link refreshed! You can preview it directly now.`,
@@ -489,34 +669,20 @@ export default function AutoReserveTab({
     setSaving(true);
 
     try {
+      const existingEditing = editingProfileId
+        ? profiles.find((p) => p.id === editingProfileId) ?? null
+        : null;
       const region = regions.find((r) => r.id === selectedRegionId);
+      const effectiveRegionId = region?.id ?? existingEditing?.region_id ?? "";
+      const effectiveRegionName = region?.name ?? existingEditing?.region_name ?? "";
       const province = provinces.find((p) => p.id === selectedProvinceId);
       const route = routes.find((rt) => rt.id === selectedRouteId);
 
-      if (!region) {
+      if (!effectiveRegionId || !effectiveRegionName) {
         throw new Error("Please select a Region first.");
       }
 
-      const serializedUnits: VehicleUnitInput[] = unitsDraft.map((u) => {
-        const documents: UnitDocuments = {
-          sales_invoice_file: u.sales_invoice_file,
-          or_file: u.or_file,
-          cr_file: u.cr_file,
-        };
-        return {
-          plate_number: u.plate_number.trim().toUpperCase(),
-          mv_file_number: u.mv_file_number.trim(),
-          make: u.make.trim(),
-          series: u.series.trim(),
-          year_model: Number(u.year_model) || new Date().getFullYear(),
-          body_type: u.body_type.trim() || "Sedan",
-          ...(u.ev_type ? { ev_type: u.ev_type } : {}),
-          ...(u.engine_number.trim() ? { engine_number: u.engine_number.trim() } : {}),
-          chassis_number: u.chassis_number.trim(),
-          documents,
-          document_storage_paths: u.document_storage_paths,
-        };
-      });
+      const serializedUnits = serializeUnitsDraft(unitsDraft);
 
       const isEditing = Boolean(editingProfileId);
       const res = await fetch("/api/reservation/profiles", {
@@ -526,14 +692,15 @@ export default function AutoReserveTab({
           ...(isEditing ? { id: editingProfileId } : {}),
           profile_name:
             profileName.trim() ||
-            `${franchiseTypeCode} (${isFleet ? `Fleet ${serializedUnits.length}` : "Individual"}) — ${region.name}`,
+            `${franchiseTypeCode} (${isFleet ? `Fleet ${serializedUnits.length}` : "Individual"}) — ${effectiveRegionName}`,
           franchise_type_code: franchiseTypeCode,
-          region_id: region.id,
-          region_name: region.name,
-          province_id: province?.id ?? null,
-          province_name: province?.name ?? null,
-          route_id: route?.id ?? null,
-          route_name: route?.name ?? null,
+          region_id: effectiveRegionId,
+          region_name: effectiveRegionName,
+          province_id: province?.id ?? (selectedProvinceId ? existingEditing?.province_id ?? null : null),
+          province_name:
+            province?.name ?? (selectedProvinceId ? existingEditing?.province_name ?? null : null),
+          route_id: route?.id ?? (selectedRouteId ? existingEditing?.route_id ?? null : null),
+          route_name: route?.name ?? (selectedRouteId ? existingEditing?.route_name ?? null : null),
           number_of_units: serializedUnits.length,
           is_fleet: isFleet,
           notify_email: notifyEmail.trim() || userEmail,
@@ -1101,8 +1268,8 @@ export default function AutoReserveTab({
 
                     return (
                       <div key={doc.key} className="rounded-xl bg-white p-5">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="min-w-0 flex-1">
+                        <div className="flex flex-col gap-4">
+                          <div>
                             <p className="text-lg font-bold text-[#17191C]">{doc.title}</p>
                             <p className="mt-1 text-base text-[#4B5563]">{doc.hint}</p>
                           </div>
@@ -1143,22 +1310,22 @@ export default function AutoReserveTab({
                                 )}
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    setUnitsDraft((prev) =>
-                                      prev.map((item, i) =>
-                                        i === idx
-                                          ? {
-                                              ...item,
+                                  onClick={() => {
+                                    const nextDrafts = unitsDraft.map((item, i) =>
+                                      i === idx
+                                        ? {
+                                            ...item,
+                                            [doc.key]: null,
+                                            document_storage_paths: {
+                                              ...item.document_storage_paths,
                                               [doc.key]: null,
-                                              document_storage_paths: {
-                                                ...item.document_storage_paths,
-                                                [doc.key]: null,
-                                              },
-                                            }
-                                          : item
-                                      )
-                                    )
-                                  }
+                                            },
+                                          }
+                                        : item
+                                    );
+                                    setUnitsDraft(nextDrafts);
+                                    void persistUnitsIfEditing(nextDrafts);
+                                  }}
                                   className="min-h-12 rounded-xl bg-[#FEE2E2] px-4 py-2.5 text-base font-bold text-[#7F1D1D] hover:bg-[#FECACA]"
                                 >
                                   Remove
