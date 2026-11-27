@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import ModalDialog from "@/components/ModalDialog";
 import { isPresignedS3UrlExpired } from "@/lib/ltfrb/client";
 import { formatSubmissionTriggerDisplay } from "@/lib/monitor/submission-trigger";
 import type {
@@ -132,8 +133,12 @@ export default function AutoReserveTab({
   const [saving, setSaving] = useState(false);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [modalNotice, setModalNotice] = useState<{
+    kind: "success" | "error";
+    text: string;
+  } | null>(null);
   const [draftHydrated, setDraftHydrated] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
 
   const draftStorageKey = `ltfrb_reserve_draft:${(userEmail ?? "anon").toLowerCase()}`;
 
@@ -361,6 +366,22 @@ export default function AutoReserveTab({
     setUnitsDraft([createEmptyUnitDraft(initialEv)]);
   }
 
+  function openCreateProfileModal() {
+    if (editingProfileId) {
+      resetFormToNew();
+    }
+    setModalNotice(null);
+    setIsFormModalOpen(true);
+  }
+
+  function closeProfileModal() {
+    setIsFormModalOpen(false);
+    setModalNotice(null);
+    if (editingProfileId) {
+      resetFormToNew();
+    }
+  }
+
   function startEditingProfile(profile: ApplicationProfile) {
     const profileEv =
       profile.franchise_type_code === "E_TNVS" || profile.franchise_type_code === "EVT";
@@ -382,7 +403,8 @@ export default function AutoReserveTab({
     setSubmitAtMidnight(Boolean(profile.submit_at_midnight));
     setSubmitHourly(Boolean(profile.submit_hourly));
     setUnitsDraft(loadedUnits);
-    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    setModalNotice(null);
+    setIsFormModalOpen(true);
   }
 
   async function uploadPdfFile(file: File): Promise<{ url: string; storagePath: string | null }> {
@@ -427,17 +449,15 @@ export default function AutoReserveTab({
       );
       setUnitsDraft(nextDrafts);
       const persisted = await persistUnitsIfEditing(nextDrafts);
-      onBanner({
-        kind: "success",
-        text: persisted
-          ? `Unit ${unitIndex + 1} PDF uploaded and saved to your profile.`
-          : `Unit ${unitIndex + 1} PDF uploaded! Click "Save Reservation Profile" below when you finish filling out the form.`,
-      });
+      const successMsg = persisted
+        ? `Unit ${unitIndex + 1} PDF uploaded and saved to your profile.`
+        : `Unit ${unitIndex + 1} PDF uploaded! Click "Save Reservation Profile" below when you finish filling out the form.`;
+      setModalNotice({ kind: "success", text: successMsg });
+      onBanner({ kind: "success", text: successMsg });
     } catch (err) {
-      onBanner({
-        kind: "error",
-        text: err instanceof Error ? err.message : "PDF upload failed.",
-      });
+      const errorMsg = err instanceof Error ? err.message : "PDF upload failed.";
+      setModalNotice({ kind: "error", text: errorMsg });
+      onBanner({ kind: "error", text: errorMsg });
     } finally {
       setUploadingKey(null);
     }
@@ -512,15 +532,14 @@ export default function AutoReserveTab({
       );
       setUnitsDraft(nextDrafts);
       await persistUnitsIfEditing(nextDrafts);
-      onBanner({
-        kind: "success",
-        text: `Unit ${unitIndex + 1} LTFRB S3 link refreshed! You can preview it directly now.`,
-      });
+      const successMsg = `Unit ${unitIndex + 1} LTFRB S3 link refreshed! You can preview it directly now.`;
+      setModalNotice({ kind: "success", text: successMsg });
+      onBanner({ kind: "success", text: successMsg });
     } catch (err) {
-      onBanner({
-        kind: "error",
-        text: err instanceof Error ? err.message : "Could not refresh LTFRB S3 link.",
-      });
+      const errorMsg =
+        err instanceof Error ? err.message : "Could not refresh LTFRB S3 link.";
+      setModalNotice({ kind: "error", text: errorMsg });
+      onBanner({ kind: "error", text: errorMsg });
     } finally {
       setUploadingKey(null);
     }
@@ -719,6 +738,8 @@ export default function AutoReserveTab({
       }
 
       resetFormToNew();
+      setIsFormModalOpen(false);
+      setModalNotice(null);
       await onRefresh();
       onBanner({
         kind: "success",
@@ -729,10 +750,10 @@ export default function AutoReserveTab({
           : "Saved! You can turn on automatic reservation anytime below.",
       });
     } catch (err) {
-      onBanner({
-        kind: "error",
-        text: err instanceof Error ? err.message : "Could not save reservation profile.",
-      });
+      const errorMsg =
+        err instanceof Error ? err.message : "Could not save reservation profile.";
+      setModalNotice({ kind: "error", text: errorMsg });
+      onBanner({ kind: "error", text: errorMsg });
     } finally {
       setSaving(false);
     }
@@ -820,34 +841,312 @@ export default function AutoReserveTab({
         </div>
       )}
 
-      {/* Application Form */}
-      <form ref={formRef} onSubmit={handleSaveProfile} className="rounded-2xl bg-white p-6 sm:p-8">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Saved Reservation Profiles (shown first so user can submit immediately without scrolling) */}
+      <div className="rounded-2xl bg-white p-6 sm:p-8">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 id="reserve-heading" className="text-2xl font-bold text-[#17191C]">
-              {editingProfileId
-                ? "Edit Saved Reservation Profile"
-                : "Prepare Automatic Slot Reservation"}
+              Saved Reservation Profiles
             </h2>
-            <p className="mt-2 text-lg leading-relaxed text-[#374151]">
-              {editingProfileId
-                ? "Update any details or documents below, then tap Save Profile Changes."
-                : "Fill in your LTFRB application type, authorized units, franchise area, and vehicle details once. We submit automatically when matching open slots appear."}
+            <p className="mt-1 text-lg text-[#4B5563]">
+              Tap <strong>Try Submitting Now</strong> anytime, or manage your automatic filing
+              profiles.
             </p>
           </div>
-
-          {editingProfileId && (
-            <button
-              type="button"
-              onClick={resetFormToNew}
-              className="min-h-12 shrink-0 rounded-xl bg-[#EEF1F4] px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-            >
-              Cancel Editing
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={openCreateProfileModal}
+            className="min-h-12 shrink-0 rounded-xl bg-[#1D4ED8] px-6 py-3.5 text-lg font-bold text-white hover:bg-[#1E40AF] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+          >
+            + New Reservation Profile
+          </button>
         </div>
 
-        <div className="mt-6 space-y-6">
+        {profiles.length === 0 ? (
+          <div className="mt-6 rounded-xl bg-[#EEF1F4] p-6">
+            <p className="text-lg text-[#4B5563]">
+              No reservation profiles saved yet. Add your vehicle details and PDF documents in one
+              quick form to get ready.
+            </p>
+            <button
+              type="button"
+              onClick={openCreateProfileModal}
+              className="mt-4 min-h-12 rounded-xl bg-[#1D4ED8] px-6 py-3 text-lg font-bold text-white hover:bg-[#1E40AF] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+            >
+              + Add Your First Reservation Profile
+            </button>
+          </div>
+        ) : (
+          <div className="mt-6 space-y-4">
+            {profiles.map((profile) => {
+              const isSubmitted = profile.lock_status === "submitted";
+              const unit0 = profile.units?.[0];
+              const docs = unit0?.documents;
+              const paths0 = unit0?.document_storage_paths;
+              const unitCount = profile.number_of_units || profile.units?.length || 1;
+              const needsEv =
+                (profile.franchise_type_code === "E_TNVS" ||
+                  profile.franchise_type_code === "EVT") &&
+                (profile.units ?? []).some((u) => !u.ev_type);
+
+              return (
+                <div key={profile.id} className="space-y-4 rounded-xl bg-[#EEF1F4] p-5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-xl font-bold text-[#17191C]">{profile.profile_name}</p>
+                        <span className="rounded-lg bg-white px-3 py-1 text-base font-bold text-[#102E7A]">
+                          {profile.is_fleet ? "Fleet" : "Individual"} • {unitCount} Unit
+                          {unitCount === 1 ? "" : "s"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-lg text-[#374151]">
+                        {profile.franchise_type_code}
+                        {unit0?.ev_type ? ` (${unit0.ev_type})` : ""} •{" "}
+                        {profile.province_name
+                          ? `${profile.province_name}, ${profile.region_name}`
+                          : profile.region_name}
+                      </p>
+                      {profile.units && profile.units.length > 0 && (
+                        <p className="mt-1 text-base text-[#4B5563]">
+                          Units:{" "}
+                          <strong>
+                            {profile.units
+                              .map((u) => u.plate_number || "No Plate")
+                              .join(", ")}
+                          </strong>
+                        </p>
+                      )}
+                      {needsEv && !isSubmitted && (
+                        <div className="mt-3 rounded-xl bg-[#FEF3C7] p-4 text-[#78350F]">
+                          <p className="text-base font-bold">
+                            Action Needed: Pick your Electric Vehicle Type for{" "}
+                            {profile.franchise_type_code}
+                          </p>
+                          <div className="mt-3 flex flex-wrap gap-3">
+                            {(["BEV", "PHEV", "HEV"] as const).map((choice) => (
+                              <button
+                                key={choice}
+                                type="button"
+                                onClick={() => void handleUpdateSavedEvType(profile, choice)}
+                                className="min-h-12 rounded-xl bg-white px-5 py-2.5 text-base font-bold text-[#17191C] hover:bg-[#E2E6EB]"
+                              >
+                                Set {choice}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {[
+                          { key: "sales_invoice_file" as const, label: "Sales Invoice", empty: "None" },
+                          { key: "or_file" as const, label: "OR", empty: "Add Later" },
+                          { key: "cr_file" as const, label: "CR", empty: "Add Later" },
+                        ].map((item) => {
+                          const url = docs?.[item.key];
+                          const path = paths0?.[item.key];
+                          if (!url) {
+                            return (
+                              <span
+                                key={item.key}
+                                className="inline-block rounded-lg bg-white px-3 py-1.5 text-base font-bold text-[#4B5563]"
+                              >
+                                {item.label}: {item.empty}
+                              </span>
+                            );
+                          }
+                          const expired = isPresignedS3UrlExpired(url);
+                          const refreshKey = `refresh-saved:${profile.id}:0:${item.key}`;
+                          return (
+                            <div key={item.key} className="flex flex-wrap items-center gap-2">
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className={`inline-block rounded-lg px-3 py-1.5 text-base font-bold ${
+                                  expired
+                                    ? "bg-[#FEF3C7] text-[#78350F] hover:bg-[#FDE68A]"
+                                    : "bg-[#DCFCE7] text-[#14532D] hover:bg-[#BBF7D0]"
+                                }`}
+                              >
+                                {item.label}: {expired ? "S3 Expired (Check)" : "View PDF (LTFRB S3)"}
+                              </a>
+                              {path && expired && hasSavedLtfrbAccount && !isSubmitted && (
+                                <button
+                                  type="button"
+                                  disabled={uploadingKey !== null}
+                                  onClick={() =>
+                                    void handleRefreshSavedDoc(profile, 0, item.key, path)
+                                  }
+                                  className="rounded-lg bg-[#DBEAFE] px-3 py-1.5 text-base font-bold text-[#1E3A8A] hover:bg-[#BFDBFE] disabled:opacity-60"
+                                >
+                                  {uploadingKey === refreshKey ? "Refreshing..." : "Refresh S3 Link"}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {profile.submitted_reference && (
+                        <p className="mt-2 text-lg font-bold text-[#14532D]">
+                          LTFRB Case Number: {profile.submitted_reference}
+                        </p>
+                      )}
+                      {isSubmitted ? (
+                        <p className="mt-2 text-base font-bold text-[#14532D]">
+                          Application submitted! Auto-submission is stopped for this profile.
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-base text-[#374151]">
+                          Auto-submit timing:{" "}
+                          <strong>
+                            {[
+                              (profile.submit_on_slot_increase ?? true) && "When slots increase",
+                              profile.submit_at_midnight && "12:00 MN, 7:00 AM & 8:00 AM (Manila)",
+                              profile.submit_hourly && "Once every hour",
+                            ]
+                              .filter(Boolean)
+                              .join(" • ") || "Manual only"}
+                          </strong>
+                        </p>
+                      )}
+                      {profile.last_error && !isSubmitted && (
+                        <p className="mt-2 text-base text-[#7F1D1D]">
+                          Last message: {profile.last_error}
+                        </p>
+                      )}
+                    </div>
+
+                    <span
+                      className={`inline-block rounded-xl px-4 py-2 text-base font-bold ${
+                        isSubmitted
+                          ? "bg-[#DCFCE7] text-[#14532D]"
+                          : profile.is_armed
+                          ? "bg-[#DBEAFE] text-[#1E3A8A]"
+                          : "bg-[#E7E5E4] text-[#292524]"
+                      }`}
+                    >
+                      {isSubmitted
+                        ? "Submitted"
+                        : profile.is_armed
+                        ? "Auto-Reserve Ready"
+                        : "Paused"}
+                    </span>
+                  </div>
+
+                  {!isSubmitted && (
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleSubmitNow(profile.id)}
+                        disabled={submittingId === profile.id || !hasSavedLtfrbAccount}
+                        className="min-h-12 rounded-xl bg-[#1D4ED8] px-5 py-3 text-lg font-bold text-white hover:bg-[#1E40AF] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-60"
+                      >
+                        {submittingId === profile.id
+                          ? "Submitting to LTFRB..."
+                          : "Try Submitting Now"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleArmed(profile)}
+                        className="min-h-12 rounded-xl bg-white px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                      >
+                        {profile.is_armed ? "Pause Auto-Reserve" : "Turn On Auto-Reserve"}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => startEditingProfile(profile)}
+                        className="min-h-12 rounded-xl bg-white px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                      >
+                        Edit Details
+                      </button>
+
+                      {hasSavedLtfrbAccount && !docs?.or_file && (
+                        <label className="inline-flex min-h-12 cursor-pointer items-center rounded-xl bg-white px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB]">
+                          {uploadingKey === `${profile.id}:or_file`
+                            ? "Uploading OR..."
+                            : "Add OR PDF"}
+                          <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            disabled={uploadingKey !== null}
+                            onChange={(e) => {
+                              const picked = e.target.files?.[0];
+                              void handleAttachDocToSavedProfile(profile, "or_file", picked);
+                              e.target.value = "";
+                            }}
+                            className="sr-only"
+                          />
+                        </label>
+                      )}
+
+                      {hasSavedLtfrbAccount && !docs?.cr_file && (
+                        <label className="inline-flex min-h-12 cursor-pointer items-center rounded-xl bg-white px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB]">
+                          {uploadingKey === `${profile.id}:cr_file`
+                            ? "Uploading CR..."
+                            : "Add CR PDF"}
+                          <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            disabled={uploadingKey !== null}
+                            onChange={(e) => {
+                              const picked = e.target.files?.[0];
+                              void handleAttachDocToSavedProfile(profile, "cr_file", picked);
+                              e.target.value = "";
+                            }}
+                            className="sr-only"
+                          />
+                        </label>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteProfile(profile.id)}
+                        className="min-h-12 rounded-xl bg-[#FEE2E2] px-5 py-3 text-lg font-bold text-[#7F1D1D] hover:bg-[#FECACA] focus:outline-none focus:ring-4 focus:ring-red-700/30"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Application Create/Edit Modal */}
+      <ModalDialog
+        open={isFormModalOpen}
+        title={
+          editingProfileId
+            ? "Edit Saved Reservation Profile"
+            : "Prepare Automatic Slot Reservation"
+        }
+        subtitle={
+          editingProfileId
+            ? "Update any details or documents below, then tap Save Profile Changes."
+            : "Fill in your LTFRB application type, authorized units, franchise area, and vehicle details once. We submit automatically when matching open slots appear."
+        }
+        titleId="reserve-modal-title"
+        maxWidthClass="max-w-4xl"
+        onClose={closeProfileModal}
+      >
+        <form onSubmit={handleSaveProfile} className="space-y-6">
+          {modalNotice && (
+            <div
+              role="alert"
+              className={`rounded-xl p-4 text-base font-bold ${
+                modalNotice.kind === "success"
+                  ? "bg-[#DCFCE7] text-[#14532D]"
+                  : "bg-[#FEE2E2] text-[#7F1D1D]"
+              }`}
+            >
+              {modalNotice.text}
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div>
               <label htmlFor="res-name" className="block text-lg font-bold text-[#17191C]">
@@ -1472,266 +1771,16 @@ export default function AutoReserveTab({
                 : "Save Reservation Profile"}
             </button>
 
-            {editingProfileId && (
-              <button
-                type="button"
-                onClick={resetFormToNew}
-                className="min-h-12 w-full rounded-xl bg-[#EEF1F4] px-6 py-4 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30 sm:w-auto"
-              >
-                Cancel Editing
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={closeProfileModal}
+              className="min-h-12 w-full rounded-xl bg-[#EEF1F4] px-6 py-4 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30 sm:w-auto"
+            >
+              {editingProfileId ? "Cancel Editing" : "Close"}
+            </button>
           </div>
-        </div>
-      </form>
-
-      {/* Saved Reservation Profiles */}
-      <div className="rounded-2xl bg-white p-6 sm:p-8">
-        <h3 className="text-2xl font-bold text-[#17191C]">Your Saved Reservation Profiles</h3>
-        {profiles.length === 0 ? (
-          <p className="mt-3 text-lg text-[#4B5563]">
-            No reservation profiles saved yet. Fill in the form above to get ready.
-          </p>
-        ) : (
-          <div className="mt-5 space-y-4">
-            {profiles.map((profile) => {
-              const isSubmitted = profile.lock_status === "submitted";
-              const unit0 = profile.units?.[0];
-              const docs = unit0?.documents;
-              const paths0 = unit0?.document_storage_paths;
-              const unitCount = profile.number_of_units || profile.units?.length || 1;
-              const needsEv =
-                (profile.franchise_type_code === "E_TNVS" ||
-                  profile.franchise_type_code === "EVT") &&
-                (profile.units ?? []).some((u) => !u.ev_type);
-
-              return (
-                <div key={profile.id} className="space-y-4 rounded-xl bg-[#EEF1F4] p-5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-xl font-bold text-[#17191C]">{profile.profile_name}</p>
-                        <span className="rounded-lg bg-white px-3 py-1 text-base font-bold text-[#102E7A]">
-                          {profile.is_fleet ? "Fleet" : "Individual"} • {unitCount} Unit
-                          {unitCount === 1 ? "" : "s"}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-lg text-[#374151]">
-                        {profile.franchise_type_code}
-                        {unit0?.ev_type ? ` (${unit0.ev_type})` : ""} •{" "}
-                        {profile.province_name
-                          ? `${profile.province_name}, ${profile.region_name}`
-                          : profile.region_name}
-                      </p>
-                      {profile.units && profile.units.length > 0 && (
-                        <p className="mt-1 text-base text-[#4B5563]">
-                          Units:{" "}
-                          <strong>
-                            {profile.units
-                              .map((u) => u.plate_number || "No Plate")
-                              .join(", ")}
-                          </strong>
-                        </p>
-                      )}
-                      {needsEv && !isSubmitted && (
-                        <div className="mt-3 rounded-xl bg-[#FEF3C7] p-4 text-[#78350F]">
-                          <p className="text-base font-bold">
-                            Action Needed: Pick your Electric Vehicle Type for{" "}
-                            {profile.franchise_type_code}
-                          </p>
-                          <div className="mt-3 flex flex-wrap gap-3">
-                            {(["BEV", "PHEV", "HEV"] as const).map((choice) => (
-                              <button
-                                key={choice}
-                                type="button"
-                                onClick={() => void handleUpdateSavedEvType(profile, choice)}
-                                className="min-h-12 rounded-xl bg-white px-5 py-2.5 text-base font-bold text-[#17191C] hover:bg-[#E2E6EB]"
-                              >
-                                Set {choice}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {[
-                          { key: "sales_invoice_file" as const, label: "Sales Invoice", empty: "None" },
-                          { key: "or_file" as const, label: "OR", empty: "Add Later" },
-                          { key: "cr_file" as const, label: "CR", empty: "Add Later" },
-                        ].map((item) => {
-                          const url = docs?.[item.key];
-                          const path = paths0?.[item.key];
-                          if (!url) {
-                            return (
-                              <span
-                                key={item.key}
-                                className="inline-block rounded-lg bg-white px-3 py-1.5 text-base font-bold text-[#4B5563]"
-                              >
-                                {item.label}: {item.empty}
-                              </span>
-                            );
-                          }
-                          const expired = isPresignedS3UrlExpired(url);
-                          const refreshKey = `refresh-saved:${profile.id}:0:${item.key}`;
-                          return (
-                            <div key={item.key} className="flex flex-wrap items-center gap-2">
-                              <a
-                                href={url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className={`inline-block rounded-lg px-3 py-1.5 text-base font-bold ${
-                                  expired
-                                    ? "bg-[#FEF3C7] text-[#78350F] hover:bg-[#FDE68A]"
-                                    : "bg-[#DCFCE7] text-[#14532D] hover:bg-[#BBF7D0]"
-                                }`}
-                              >
-                                {item.label}: {expired ? "S3 Expired (Check)" : "View PDF (LTFRB S3)"}
-                              </a>
-                              {path && expired && hasSavedLtfrbAccount && !isSubmitted && (
-                                <button
-                                  type="button"
-                                  disabled={uploadingKey !== null}
-                                  onClick={() =>
-                                    void handleRefreshSavedDoc(profile, 0, item.key, path)
-                                  }
-                                  className="rounded-lg bg-[#DBEAFE] px-3 py-1.5 text-base font-bold text-[#1E3A8A] hover:bg-[#BFDBFE] disabled:opacity-60"
-                                >
-                                  {uploadingKey === refreshKey ? "Refreshing..." : "Refresh S3 Link"}
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {profile.submitted_reference && (
-                        <p className="mt-2 text-lg font-bold text-[#14532D]">
-                          LTFRB Case Number: {profile.submitted_reference}
-                        </p>
-                      )}
-                      {isSubmitted ? (
-                        <p className="mt-2 text-base font-bold text-[#14532D]">
-                          Application submitted! Auto-submission is stopped for this profile.
-                        </p>
-                      ) : (
-                        <p className="mt-2 text-base text-[#374151]">
-                          Auto-submit timing:{" "}
-                          <strong>
-                            {[
-                              (profile.submit_on_slot_increase ?? true) && "When slots increase",
-                              profile.submit_at_midnight && "12:00 MN, 7:00 AM & 8:00 AM (Manila)",
-                              profile.submit_hourly && "Once every hour",
-                            ]
-                              .filter(Boolean)
-                              .join(" • ") || "Manual only"}
-                          </strong>
-                        </p>
-                      )}
-                      {profile.last_error && !isSubmitted && (
-                        <p className="mt-2 text-base text-[#7F1D1D]">
-                          Last message: {profile.last_error}
-                        </p>
-                      )}
-                    </div>
-
-                    <span
-                      className={`inline-block rounded-xl px-4 py-2 text-base font-bold ${
-                        isSubmitted
-                          ? "bg-[#DCFCE7] text-[#14532D]"
-                          : profile.is_armed
-                          ? "bg-[#DBEAFE] text-[#1E3A8A]"
-                          : "bg-[#E7E5E4] text-[#292524]"
-                      }`}
-                    >
-                      {isSubmitted
-                        ? "Submitted"
-                        : profile.is_armed
-                        ? "Auto-Reserve Ready"
-                        : "Paused"}
-                    </span>
-                  </div>
-
-                  {!isSubmitted && (
-                    <div className="flex flex-wrap gap-3">
-                      <button
-                        type="button"
-                        onClick={() => handleSubmitNow(profile.id)}
-                        disabled={submittingId === profile.id || !hasSavedLtfrbAccount}
-                        className="min-h-12 rounded-xl bg-[#1D4ED8] px-5 py-3 text-lg font-bold text-white hover:bg-[#1E40AF] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-60"
-                      >
-                        {submittingId === profile.id
-                          ? "Submitting to LTFRB..."
-                          : "Try Submitting Now"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleToggleArmed(profile)}
-                        className="min-h-12 rounded-xl bg-white px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                      >
-                        {profile.is_armed ? "Pause Auto-Reserve" : "Turn On Auto-Reserve"}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => startEditingProfile(profile)}
-                        className="min-h-12 rounded-xl bg-white px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                      >
-                        Edit Details
-                      </button>
-
-                      {hasSavedLtfrbAccount && !docs?.or_file && (
-                        <label className="inline-flex min-h-12 cursor-pointer items-center rounded-xl bg-white px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB]">
-                          {uploadingKey === `${profile.id}:or_file`
-                            ? "Uploading OR..."
-                            : "Add OR PDF"}
-                          <input
-                            type="file"
-                            accept="application/pdf,.pdf"
-                            disabled={uploadingKey !== null}
-                            onChange={(e) => {
-                              const picked = e.target.files?.[0];
-                              void handleAttachDocToSavedProfile(profile, "or_file", picked);
-                              e.target.value = "";
-                            }}
-                            className="sr-only"
-                          />
-                        </label>
-                      )}
-
-                      {hasSavedLtfrbAccount && !docs?.cr_file && (
-                        <label className="inline-flex min-h-12 cursor-pointer items-center rounded-xl bg-white px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB]">
-                          {uploadingKey === `${profile.id}:cr_file`
-                            ? "Uploading CR..."
-                            : "Add CR PDF"}
-                          <input
-                            type="file"
-                            accept="application/pdf,.pdf"
-                            disabled={uploadingKey !== null}
-                            onChange={(e) => {
-                              const picked = e.target.files?.[0];
-                              void handleAttachDocToSavedProfile(profile, "cr_file", picked);
-                              e.target.value = "";
-                            }}
-                            className="sr-only"
-                          />
-                        </label>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteProfile(profile.id)}
-                        className="min-h-12 rounded-xl bg-[#FEE2E2] px-5 py-3 text-lg font-bold text-[#7F1D1D] hover:bg-[#FECACA] focus:outline-none focus:ring-4 focus:ring-red-700/30"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+        </form>
+      </ModalDialog>
 
       {/* Submission History */}
       <div className="rounded-2xl bg-white p-6 sm:p-8">

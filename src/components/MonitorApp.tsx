@@ -7,6 +7,7 @@ import ActivityLogsTab from "@/components/ActivityLogsTab";
 import AutoReserveTab from "@/components/AutoReserveTab";
 import BillingTab from "@/components/BillingTab";
 import FranchisePickerCard from "@/components/FranchisePickerCard";
+import ModalDialog from "@/components/ModalDialog";
 import SignInRequiredCard from "@/components/SignInRequiredCard";
 import SuperAdminPasswordModal from "@/components/SuperAdminPasswordModal";
 import type {
@@ -142,6 +143,8 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
   const [notifyWhenIncreased, setNotifyWhenIncreased] = useState(true);
   const [notifyWhenDecreased, setNotifyWhenDecreased] = useState(false);
   const [savingRule, setSavingRule] = useState(false);
+  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
+  const [alertModalError, setAlertModalError] = useState<string | null>(null);
 
   // LTFRB Account form
   const [ltfrbAccountType, setLtfrbAccountType] = useState<"operator" | "tnc">("operator");
@@ -369,10 +372,21 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
     }
   }
 
+  function openCreateAlertModal() {
+    setAlertModalError(null);
+    setIsAlertModalOpen(true);
+  }
+
+  function closeAlertModal() {
+    setIsAlertModalOpen(false);
+    setAlertModalError(null);
+  }
+
   async function handleSaveRule(e: React.FormEvent) {
     e.preventDefault();
     setSavingRule(true);
     setBanner(null);
+    setAlertModalError(null);
 
     try {
       const selectedType = franchiseTypes.find((ft) => ft.code === ruleFranchiseCode);
@@ -422,15 +436,19 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
       }
 
       setRuleLabel("");
+      setIsAlertModalOpen(false);
+      setAlertModalError(null);
       await loadData();
       setBanner({
         kind: "success",
         text: "Your email alert is saved. We will email you as soon as a slot opens.",
       });
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not save your alert.";
+      setAlertModalError(msg);
       setBanner({
         kind: "error",
-        text: err instanceof Error ? err.message : "Could not save your alert.",
+        text: msg,
       });
     } finally {
       setSavingRule(false);
@@ -1075,16 +1093,128 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
             planRequiredCard("Email Alerts")
           ) : (
             <section aria-labelledby="alerts-heading" className="space-y-8">
-              <form onSubmit={handleSaveRule} className="rounded-2xl bg-white p-6 sm:p-8">
-                <h2 id="alerts-heading" className="text-2xl font-bold text-[#17191C]">
-                  Send Me an Email When Slots Open
-                </h2>
-                <p className="mt-1 text-lg text-[#4B5563]">
-                  Pick the franchise type and area you want to watch. We check automatically every
-                  15 minutes.
-                </p>
+              {/* Saved Watch Rules (shown first so user can manage alerts immediately) */}
+              <div className="rounded-2xl bg-white p-6 sm:p-8">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 id="alerts-heading" className="text-2xl font-bold text-[#17191C]">
+                      Your Saved Email Alerts
+                    </h2>
+                    <p className="mt-1 text-lg text-[#4B5563]">
+                      Watches your chosen franchise type and area automatically every 15 minutes.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openCreateAlertModal}
+                    className="min-h-12 shrink-0 rounded-xl bg-[#1447E6] px-6 py-3.5 text-lg font-bold text-white hover:bg-[#1039B8] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                  >
+                    + Create Email Alert
+                  </button>
+                </div>
 
-                <div className="mt-6 space-y-6">
+                {watchRules.length === 0 ? (
+                  <div className="mt-6 rounded-xl bg-[#EEF1F4] p-6">
+                    <p className="text-lg text-[#4B5563]">
+                      You do not have any saved alerts yet. Click below to create one.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={openCreateAlertModal}
+                      className="mt-4 min-h-12 rounded-xl bg-[#1447E6] px-6 py-3 text-lg font-bold text-white hover:bg-[#1039B8] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    >
+                      + Create Your First Email Alert
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-6 space-y-4">
+                    {watchRules.map((rule) => (
+                      <div
+                        key={rule.id}
+                        className="flex flex-col gap-4 rounded-xl bg-[#EEF1F4] p-5 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xl font-bold text-[#17191C]">{rule.label}</p>
+                          <p className="mt-1 text-lg text-[#374151]">
+                            Emails: <strong>{rule.notify_email}</strong>
+                          </p>
+                          <p className="mt-1 text-base text-[#4B5563]">
+                            Status:{" "}
+                            <strong>{rule.is_active ? "Watching every 15 mins" : "Paused"}</strong>
+                          </p>
+                          <p className="mt-1 text-base text-[#4B5563]">
+                            Emails when:{" "}
+                            {[
+                              (rule.notify_when_available ?? true) && "Slot is open",
+                              (rule.notify_when_increased ?? true) && "Slots increase (new slot)",
+                              rule.notify_when_decreased && "Slots decrease",
+                            ]
+                              .filter(Boolean)
+                              .join(" • ")}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleRule(rule)}
+                            className="min-h-12 rounded-xl bg-white px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                          >
+                            {rule.is_active ? "Pause Alert" : "Turn On Alert"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteRule(rule.id)}
+                            className="min-h-12 rounded-xl bg-[#FEE2E2] px-5 py-3 text-lg font-bold text-[#7F1D1D] hover:bg-[#FECACA] focus:outline-none focus:ring-4 focus:ring-red-700/30"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Recent Email History */}
+              <div className="rounded-2xl bg-white p-6 sm:p-8">
+                <h3 className="text-2xl font-bold text-[#17191C]">Recent Emails Sent</h3>
+                {recentNotifications.length === 0 ? (
+                  <p className="mt-3 text-lg text-[#4B5563]">No alert emails have been sent yet.</p>
+                ) : (
+                  <div className="mt-5 space-y-3">
+                    {recentNotifications.map((log) => (
+                      <div key={log.id} className="rounded-xl bg-[#EEF1F4] p-4">
+                        <p className="text-lg font-bold text-[#17191C]">{log.subject}</p>
+                        <p className="mt-1 text-base text-[#374151]">
+                          Sent to {log.recipient} • {log.remaining_at_alert} open slot(s) •{" "}
+                          {formatManilaTime(log.sent_at)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Create Email Alert Modal */}
+              <ModalDialog
+                open={isAlertModalOpen}
+                title="Send Me an Email When Slots Open"
+                subtitle="Pick the franchise type and area you want to watch. We check automatically every 15 minutes."
+                titleId="alert-modal-title"
+                maxWidthClass="max-w-2xl"
+                onClose={closeAlertModal}
+              >
+                <form onSubmit={handleSaveRule} className="space-y-6">
+                  {alertModalError && (
+                    <div
+                      role="alert"
+                      className="rounded-xl bg-[#FEE2E2] p-4 text-base font-bold text-[#7F1D1D]"
+                    >
+                      {alertModalError}
+                    </div>
+                  )}
+
                   <div>
                     <label htmlFor="rule-email" className="block text-lg font-bold text-[#17191C]">
                       Your Email Address
@@ -1148,7 +1278,10 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                       {visibleFranchiseTypes.length === 0 && (
                         <button
                           type="button"
-                          onClick={() => selectTab("slots")}
+                          onClick={() => {
+                            closeAlertModal();
+                            selectTab("slots");
+                          }}
                           className="mt-2 min-h-12 rounded-xl bg-[#EEF1F4] px-4 py-2 text-base font-bold text-[#1447E6] hover:bg-[#E2E6EB]"
                         >
                           Go to 1. Check Open Slots to Pick Franchise
@@ -1296,97 +1429,29 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                     </div>
                   </div>
 
-                  <button
-                    type="submit"
-                    disabled={
-                      savingRule ||
-                      !supabaseConfigured ||
-                      visibleFranchiseTypes.length === 0 ||
-                      (!notifyWhenAvailable && !notifyWhenIncreased && !notifyWhenDecreased)
-                    }
-                    className="min-h-12 w-full rounded-xl bg-[#1D4ED8] px-6 py-4 text-lg font-bold text-white hover:bg-[#1E40AF] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-60 sm:w-auto"
-                  >
-                    {savingRule ? "Saving Alert..." : "Save Email Alert"}
-                  </button>
-                </div>
-              </form>
-
-              {/* Saved Watch Rules */}
-              <div className="rounded-2xl bg-white p-6 sm:p-8">
-                <h3 className="text-2xl font-bold text-[#17191C]">Your Saved Alerts</h3>
-                {watchRules.length === 0 ? (
-                  <p className="mt-3 text-lg text-[#4B5563]">
-                    You do not have any saved alerts yet. Use the form above to add one.
-                  </p>
-                ) : (
-                  <div className="mt-5 space-y-4">
-                    {watchRules.map((rule) => (
-                      <div
-                        key={rule.id}
-                        className="flex flex-col gap-4 rounded-xl bg-[#EEF1F4] p-5 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xl font-bold text-[#17191C]">{rule.label}</p>
-                          <p className="mt-1 text-lg text-[#374151]">
-                            Emails: <strong>{rule.notify_email}</strong>
-                          </p>
-                          <p className="mt-1 text-base text-[#4B5563]">
-                            Status:{" "}
-                            <strong>{rule.is_active ? "Watching every 15 mins" : "Paused"}</strong>
-                          </p>
-                          <p className="mt-1 text-base text-[#4B5563]">
-                            Emails when:{" "}
-                            {[
-                              (rule.notify_when_available ?? true) && "Slot is open",
-                              (rule.notify_when_increased ?? true) && "Slots increase (new slot)",
-                              rule.notify_when_decreased && "Slots decrease",
-                            ]
-                              .filter(Boolean)
-                              .join(" • ")}
-                          </p>
-                        </div>
-
-                        <div className="flex flex-wrap gap-3">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleRule(rule)}
-                            className="min-h-12 rounded-xl bg-white px-5 py-3 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                          >
-                            {rule.is_active ? "Pause Alert" : "Turn On Alert"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteRule(rule.id)}
-                            className="min-h-12 rounded-xl bg-[#FEE2E2] px-5 py-3 text-lg font-bold text-[#7F1D1D] hover:bg-[#FECACA] focus:outline-none focus:ring-4 focus:ring-red-700/30"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="submit"
+                      disabled={
+                        savingRule ||
+                        !supabaseConfigured ||
+                        visibleFranchiseTypes.length === 0 ||
+                        (!notifyWhenAvailable && !notifyWhenIncreased && !notifyWhenDecreased)
+                      }
+                      className="min-h-12 w-full rounded-xl bg-[#1D4ED8] px-6 py-4 text-lg font-bold text-white hover:bg-[#1E40AF] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-60 sm:w-auto"
+                    >
+                      {savingRule ? "Saving Alert..." : "Save Email Alert"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={closeAlertModal}
+                      className="min-h-12 w-full rounded-xl bg-[#EEF1F4] px-6 py-4 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30 sm:w-auto"
+                    >
+                      Cancel
+                    </button>
                   </div>
-                )}
-              </div>
-
-              {/* Recent Email History */}
-              <div className="rounded-2xl bg-white p-6 sm:p-8">
-                <h3 className="text-2xl font-bold text-[#17191C]">Recent Emails Sent</h3>
-                {recentNotifications.length === 0 ? (
-                  <p className="mt-3 text-lg text-[#4B5563]">No alert emails have been sent yet.</p>
-                ) : (
-                  <div className="mt-5 space-y-3">
-                    {recentNotifications.map((log) => (
-                      <div key={log.id} className="rounded-xl bg-[#EEF1F4] p-4">
-                        <p className="text-lg font-bold text-[#17191C]">{log.subject}</p>
-                        <p className="mt-1 text-base text-[#374151]">
-                          Sent to {log.recipient} • {log.remaining_at_alert} open slot(s) •{" "}
-                          {formatManilaTime(log.sent_at)}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                </form>
+              </ModalDialog>
             </section>
           ))}
 
