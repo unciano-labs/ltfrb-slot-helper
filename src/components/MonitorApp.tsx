@@ -931,7 +931,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
 
         {/* TAB 1: LIVE SLOTS */}
         {activeTab === "slots" && (
-          <section aria-labelledby="slots-heading" className="space-y-8">
+          <section aria-labelledby="slots-heading" className="space-y-5">
             {user && !entitlements.isDisabled && entitlements.isActivePlan && (
               <FranchisePickerCard
                 franchiseTypes={franchiseTypes}
@@ -1087,62 +1087,54 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <p className="text-lg font-bold text-[#374151]">
                   Showing {filteredSlots.length} {viewScope === "region" ? "regional" : "provincial"}{" "}
                   entries
                 </p>
 
-                {filteredSlots.map((slot) => {
-                  const isOpen = slot.remaining > 0;
-                  const areaTitle =
-                    slot.scope === "province" && slot.provinceName
-                      ? `${slot.provinceName} — ${slot.regionName}`
-                      : slot.regionName;
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {filteredSlots.map((slot) => {
+                    const isOpen = slot.remaining > 0;
+                    const areaTitle =
+                      slot.scope === "province" && slot.provinceName
+                        ? `${slot.provinceName} — ${slot.regionName}`
+                        : slot.regionName;
 
-                  return (
-                    <article key={slot.slotKey} className="rounded-2xl bg-white p-6 sm:p-7">
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    return (
+                      <article
+                        key={slot.slotKey}
+                        className="flex items-center justify-between gap-3 rounded-xl bg-white p-4"
+                      >
                         <div className="min-w-0 flex-1">
-                          <h3 className="text-xl font-bold text-[#17191C]">
+                          <p className="text-lg font-bold leading-snug text-[#17191C]">
+                            {areaTitle}
+                          </p>
+                          <p className="mt-0.5 text-base font-bold text-[#102E7A]">
                             {slot.franchiseTypeName}
-                          </h3>
-                          <p className="mt-1 text-lg text-[#374151]">{areaTitle}</p>
-                          <p className="mt-2 text-base text-[#4B5563]">
-                            {slot.filedApplication.toLocaleString()} applied out of{" "}
-                            {slot.totalSlots.toLocaleString()} total slots (
-                            {slot.percentage.toFixed(1)}% full)
+                          </p>
+                          <p className="mt-0.5 text-base text-[#4B5563]">
+                            {slot.filedApplication.toLocaleString()} /{" "}
+                            {slot.totalSlots.toLocaleString()} filed (
+                            {slot.percentage.toFixed(1)}%)
                           </p>
                         </div>
 
-                        <div className="flex flex-col items-start gap-3 sm:items-end">
-                          <span
-                            className={`inline-block rounded-xl px-5 py-2.5 text-lg font-bold ${
-                              isOpen
-                                ? "bg-[#DCFCE7] text-[#14532D]"
-                                : "bg-[#E7E5E4] text-[#292524]"
-                            }`}
-                          >
-                            {isOpen
-                              ? `${slot.remaining.toLocaleString()} Slots Open`
-                              : "Full (0 Slots Left)"}
-                          </span>
-
-                          {isOpen && (
-                            <a
-                              href="https://ltfrb-foa.ph/login"
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[#1D4ED8] px-5 py-3 text-lg font-bold text-white hover:bg-[#1E40AF] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                            >
-                              Apply on LTFRB Website
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
+                        <span
+                          className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold ${
+                            isOpen
+                              ? "bg-[#DCFCE7] text-[#14532D]"
+                              : "bg-[#E7E5E4] text-[#292524]"
+                          }`}
+                        >
+                          {isOpen
+                            ? `${slot.remaining.toLocaleString()} Open`
+                            : "Full (0)"}
+                        </span>
+                      </article>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </section>
