@@ -128,6 +128,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
   const [selectedFranchiseCode, setSelectedFranchiseCode] = useState<string>("ALL");
   const [selectedAreaName, setSelectedAreaName] = useState<string>("ALL");
   const [onlyOpenSlots, setOnlyOpenSlots] = useState<boolean>(false);
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState<boolean>(false);
 
   // New Email Alert form
   const [ruleLabel, setRuleLabel] = useState("");
@@ -950,128 +951,47 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
               />
             )}
 
-            <div className="rounded-2xl bg-white p-6 sm:p-8">
-              <h2 id="slots-heading" className="text-2xl font-bold text-[#17191C]">
-                Filter Available Slots
-              </h2>
-              <p className="mt-1 text-lg text-[#4B5563]">
-                Pick whether to check by Region or by Province, then narrow down by franchise type.
-              </p>
-
-              <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setViewScope("region");
-                    setSelectedAreaName("ALL");
-                  }}
-                  className={`min-h-12 rounded-xl px-5 py-3 text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
-                    viewScope === "region"
-                      ? "bg-[#1D4ED8] text-white"
-                      : "bg-[#EEF1F4] text-[#17191C] hover:bg-[#E2E6EB]"
-                  }`}
-                >
-                  Show By Region
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setViewScope("province");
-                    setSelectedAreaName("ALL");
-                  }}
-                  className={`min-h-12 rounded-xl px-5 py-3 text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
-                    viewScope === "province"
-                      ? "bg-[#1D4ED8] text-white"
-                      : "bg-[#EEF1F4] text-[#17191C] hover:bg-[#E2E6EB]"
-                  }`}
-                >
-                  Show By Province
-                </button>
-              </div>
-
-              <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-                <div>
-                  <label
-                    htmlFor="filter-franchise"
-                    className="block text-lg font-bold text-[#17191C]"
-                  >
-                    Franchise Type
-                  </label>
-                  <select
-                    id="filter-franchise"
-                    value={selectedFranchiseCode}
-                    onChange={(e) => setSelectedFranchiseCode(e.target.value)}
-                    className="mt-2 min-h-12 w-full rounded-xl bg-[#EEF1F4] px-4 py-3 text-lg text-[#17191C] focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                  >
-                    <option value="ALL">
-                      {hasAccountFranchiseFilter
-                        ? "All My Selected Franchises"
-                        : "All Franchise Types"}
-                    </option>
-                    {(hasAccountFranchiseFilter ? visibleFranchiseTypes : franchiseTypes).map(
-                      (ft) => (
-                        <option key={ft.code} value={ft.code}>
-                          {ft.name} ({ft.code})
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="filter-area" className="block text-lg font-bold text-[#17191C]">
-                    {viewScope === "region" ? "Region" : "Province"}
-                  </label>
-                  <select
-                    id="filter-area"
-                    value={selectedAreaName}
-                    onChange={(e) => setSelectedAreaName(e.target.value)}
-                    className="mt-2 min-h-12 w-full rounded-xl bg-[#EEF1F4] px-4 py-3 text-lg text-[#17191C] focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-700/30"
-                  >
-                    <option value="ALL">
-                      All {viewScope === "region" ? "Regions" : "Provinces"}
-                    </option>
-                    {areaOptions.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
+            {/* Compact Filter Bar (full controls inside Modal) */}
+            <div className="flex flex-col gap-3 rounded-2xl bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 flex-1">
+                <h2 id="slots-heading" className="text-xl font-bold text-[#17191C]">
+                  Showing {filteredSlots.length}{" "}
+                  {viewScope === "region" ? "regional" : "provincial"} entries
+                </h2>
+                <div className="mt-1.5 flex flex-wrap gap-2">
+                  <span className="rounded-lg bg-[#EEF1F4] px-3 py-1 text-base font-bold text-[#374151]">
+                    {viewScope === "region" ? "By Region" : "By Province"}
+                  </span>
+                  {selectedFranchiseCode !== "ALL" && (
+                    <span className="rounded-lg bg-[#EFF6FF] px-3 py-1 text-base font-bold text-[#102E7A]">
+                      {selectedFranchiseCode}
+                    </span>
+                  )}
+                  {selectedAreaName !== "ALL" && (
+                    <span className="rounded-lg bg-[#EFF6FF] px-3 py-1 text-base font-bold text-[#102E7A]">
+                      {selectedAreaName}
+                    </span>
+                  )}
+                  {onlyOpenSlots && (
+                    <span className="rounded-lg bg-[#DCFCE7] px-3 py-1 text-base font-bold text-[#14532D]">
+                      Open Slots Only
+                    </span>
+                  )}
+                  {showAllPublicSlots && (
+                    <span className="rounded-lg bg-[#FEF3C7] px-3 py-1 text-base font-bold text-[#78350F]">
+                      All LTFRB Franchises
+                    </span>
+                  )}
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={onlyOpenSlots}
-                  onClick={() => setOnlyOpenSlots((prev) => !prev)}
-                  className={`min-h-12 w-full rounded-xl px-5 py-3 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 sm:w-auto ${
-                    onlyOpenSlots
-                      ? "bg-[#DCFCE7] text-[#14532D]"
-                      : "bg-[#EEF1F4] text-[#17191C] hover:bg-[#E2E6EB]"
-                  }`}
-                >
-                  {onlyOpenSlots
-                    ? "Showing Open Slots Only (Tap to Show All)"
-                    : "Show Only Open Slots (Hide Full Entries)"}
-                </button>
-
-                {user && monitoredFranchiseCodes.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAllPublicSlots((prev) => !prev);
-                      setSelectedFranchiseCode("ALL");
-                    }}
-                    className="min-h-12 w-full rounded-xl bg-[#EEF1F4] px-5 py-3 text-left text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30 sm:w-auto"
-                  >
-                    {showAllPublicSlots
-                      ? "Back to My Selected Franchises Only"
-                      : "Peek at All LTFRB Franchises"}
-                  </button>
-                )}
-              </div>
+              <button
+                type="button"
+                onClick={() => setIsFilterModalOpen(true)}
+                className="min-h-12 shrink-0 rounded-xl bg-[#1447E6] px-6 py-3 text-lg font-bold text-white hover:bg-[#1039B8] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+              >
+                Filter Slots
+              </button>
             </div>
 
             {loading || (refreshingLiveSlots && regionSlots.length === 0) ? (
@@ -1085,58 +1005,208 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                   Try choosing &ldquo;All Franchise Types&rdquo; or turning off &ldquo;Show Only
                   Open Slots&rdquo;.
                 </p>
+                <button
+                  type="button"
+                  onClick={() => setIsFilterModalOpen(true)}
+                  className="mt-4 min-h-12 rounded-xl bg-[#1447E6] px-6 py-3 text-lg font-bold text-white hover:bg-[#1039B8] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                >
+                  Open Filter Options
+                </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                <p className="text-lg font-bold text-[#374151]">
-                  Showing {filteredSlots.length} {viewScope === "region" ? "regional" : "provincial"}{" "}
-                  entries
-                </p>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {filteredSlots.map((slot) => {
+                  const isOpen = slot.remaining > 0;
+                  const areaTitle =
+                    slot.scope === "province" && slot.provinceName
+                      ? `${slot.provinceName} — ${slot.regionName}`
+                      : slot.regionName;
 
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  {filteredSlots.map((slot) => {
-                    const isOpen = slot.remaining > 0;
-                    const areaTitle =
-                      slot.scope === "province" && slot.provinceName
-                        ? `${slot.provinceName} — ${slot.regionName}`
-                        : slot.regionName;
+                  return (
+                    <article
+                      key={slot.slotKey}
+                      className="flex items-center justify-between gap-3 rounded-xl bg-white p-4"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-lg font-bold leading-snug text-[#17191C]">
+                          {areaTitle}
+                        </p>
+                        <p className="mt-0.5 text-base font-bold text-[#102E7A]">
+                          {slot.franchiseTypeName}
+                        </p>
+                        <p className="mt-0.5 text-base text-[#4B5563]">
+                          {slot.filedApplication.toLocaleString()} /{" "}
+                          {slot.totalSlots.toLocaleString()} filed (
+                          {slot.percentage.toFixed(1)}%)
+                        </p>
+                      </div>
 
-                    return (
-                      <article
-                        key={slot.slotKey}
-                        className="flex items-center justify-between gap-3 rounded-xl bg-white p-4"
+                      <span
+                        className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold ${
+                          isOpen
+                            ? "bg-[#DCFCE7] text-[#14532D]"
+                            : "bg-[#E7E5E4] text-[#292524]"
+                        }`}
                       >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-lg font-bold leading-snug text-[#17191C]">
-                            {areaTitle}
-                          </p>
-                          <p className="mt-0.5 text-base font-bold text-[#102E7A]">
-                            {slot.franchiseTypeName}
-                          </p>
-                          <p className="mt-0.5 text-base text-[#4B5563]">
-                            {slot.filedApplication.toLocaleString()} /{" "}
-                            {slot.totalSlots.toLocaleString()} filed (
-                            {slot.percentage.toFixed(1)}%)
-                          </p>
-                        </div>
-
-                        <span
-                          className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold ${
-                            isOpen
-                              ? "bg-[#DCFCE7] text-[#14532D]"
-                              : "bg-[#E7E5E4] text-[#292524]"
-                          }`}
-                        >
-                          {isOpen
-                            ? `${slot.remaining.toLocaleString()} Open`
-                            : "Full (0)"}
-                        </span>
-                      </article>
-                    );
-                  })}
-                </div>
+                        {isOpen
+                          ? `${slot.remaining.toLocaleString()} Open`
+                          : "Full (0)"}
+                      </span>
+                    </article>
+                  );
+                })}
               </div>
             )}
+
+            {/* Slot Filters Modal */}
+            <ModalDialog
+              open={isFilterModalOpen}
+              title="Filter Available Slots"
+              subtitle="Pick whether to check by Region or by Province, then narrow down by franchise type."
+              titleId="slot-filter-modal-title"
+              maxWidthClass="max-w-2xl"
+              onClose={() => setIsFilterModalOpen(false)}
+            >
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewScope("region");
+                      setSelectedAreaName("ALL");
+                    }}
+                    className={`min-h-12 rounded-xl px-5 py-3 text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+                      viewScope === "region"
+                        ? "bg-[#1D4ED8] text-white"
+                        : "bg-[#EEF1F4] text-[#17191C] hover:bg-[#E2E6EB]"
+                    }`}
+                  >
+                    Show By Region
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewScope("province");
+                      setSelectedAreaName("ALL");
+                    }}
+                    className={`min-h-12 rounded-xl px-5 py-3 text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+                      viewScope === "province"
+                        ? "bg-[#1D4ED8] text-white"
+                        : "bg-[#EEF1F4] text-[#17191C] hover:bg-[#E2E6EB]"
+                    }`}
+                  >
+                    Show By Province
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="filter-franchise"
+                      className="block text-lg font-bold text-[#17191C]"
+                    >
+                      Franchise Type
+                    </label>
+                    <select
+                      id="filter-franchise"
+                      value={selectedFranchiseCode}
+                      onChange={(e) => setSelectedFranchiseCode(e.target.value)}
+                      className="mt-2 min-h-12 w-full rounded-xl bg-[#EEF1F4] px-4 py-3 text-lg text-[#17191C] focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    >
+                      <option value="ALL">
+                        {hasAccountFranchiseFilter
+                          ? "All My Selected Franchises"
+                          : "All Franchise Types"}
+                      </option>
+                      {(hasAccountFranchiseFilter ? visibleFranchiseTypes : franchiseTypes).map(
+                        (ft) => (
+                          <option key={ft.code} value={ft.code}>
+                            {ft.name} ({ft.code})
+                          </option>
+                        )
+                      )}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label htmlFor="filter-area" className="block text-lg font-bold text-[#17191C]">
+                      {viewScope === "region" ? "Region" : "Province"}
+                    </label>
+                    <select
+                      id="filter-area"
+                      value={selectedAreaName}
+                      onChange={(e) => setSelectedAreaName(e.target.value)}
+                      className="mt-2 min-h-12 w-full rounded-xl bg-[#EEF1F4] px-4 py-3 text-lg text-[#17191C] focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    >
+                      <option value="ALL">
+                        All {viewScope === "region" ? "Regions" : "Provinces"}
+                      </option>
+                      {areaOptions.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={onlyOpenSlots}
+                    onClick={() => setOnlyOpenSlots((prev) => !prev)}
+                    className={`min-h-12 w-full rounded-xl px-5 py-3 text-left text-lg font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+                      onlyOpenSlots
+                        ? "bg-[#DCFCE7] text-[#14532D]"
+                        : "bg-[#EEF1F4] text-[#17191C] hover:bg-[#E2E6EB]"
+                    }`}
+                  >
+                    {onlyOpenSlots
+                      ? "Showing Open Slots Only (Tap to Show All)"
+                      : "Show Only Open Slots (Hide Full Entries)"}
+                  </button>
+
+                  {user && monitoredFranchiseCodes.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAllPublicSlots((prev) => !prev);
+                        setSelectedFranchiseCode("ALL");
+                      }}
+                      className="min-h-12 w-full rounded-xl bg-[#EEF1F4] px-5 py-3 text-left text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                    >
+                      {showAllPublicSlots
+                        ? "Back to My Selected Franchises Only"
+                        : "Peek at All LTFRB Franchises"}
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsFilterModalOpen(false)}
+                    className="min-h-12 flex-1 rounded-xl bg-[#1447E6] px-6 py-3.5 text-lg font-bold text-white hover:bg-[#1039B8] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                  >
+                    Show {filteredSlots.length} Matching Slot(s)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewScope("region");
+                      setSelectedFranchiseCode("ALL");
+                      setSelectedAreaName("ALL");
+                      setOnlyOpenSlots(false);
+                      setShowAllPublicSlots(false);
+                    }}
+                    className="min-h-12 rounded-xl bg-[#EEF1F4] px-5 py-3.5 text-lg font-bold text-[#17191C] hover:bg-[#E2E6EB] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+            </ModalDialog>
           </section>
         )}
 
