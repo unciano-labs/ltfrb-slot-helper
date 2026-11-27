@@ -31,6 +31,7 @@ import {
   type PaymentRequestRow,
   type UserEntitlements,
 } from "@/lib/monitor/monetization";
+import type { SlotMovementEvent } from "@/lib/monitor/slot-analytics";
 
 type ActiveTab = "slots" | "alerts" | "account" | "reserve" | "billing" | "logs";
 
@@ -86,6 +87,9 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
   );
   const [lastRun, setLastRun] = useState<CronRunRow | null>(initialData?.lastRun ?? null);
   const [recentRuns, setRecentRuns] = useState<CronRunRow[]>(initialData?.recentRuns ?? []);
+  const [slotEvents, setSlotEvents] = useState<SlotMovementEvent[]>(
+    initialData?.slotEvents ?? []
+  );
   const [watchRules, setWatchRules] = useState<WatchRule[]>(initialData?.watchRules ?? []);
   const [recentNotifications, setRecentNotifications] = useState<NotificationLogRow[]>(
     initialData?.recentNotifications ?? []
@@ -162,6 +166,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
     setProvinceSlots(slotsJson.provinceSlots ?? []);
     setLastRun(slotsJson.lastRun ?? null);
     setRecentRuns(slotsJson.recentRuns ?? []);
+    setSlotEvents(slotsJson.slotEvents ?? []);
     setWatchRules(slotsJson.watchRules ?? []);
     setRecentNotifications(slotsJson.recentNotifications ?? []);
     setReservationProfiles(slotsJson.reservationProfiles ?? []);
@@ -517,8 +522,8 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
       subtitle: "Manage your ₱1,699 1-Year All-Features Plan, extra Auto-Reserve profiles, and Alert slots.",
     },
     logs: {
-      title: "Activity & System Logs",
-      subtitle: "Track automatic slot checks, email notifications sent, reservation attempts, and payments.",
+      title: "Slot Timing & Activity Logs",
+      subtitle: "See when slots refill or change, analyze the best submission hours, and view recent alerts.",
     },
   };
 
@@ -709,7 +714,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                       : "bg-[#F4F4F5] text-[#18181B] hover:bg-[#E4E4E7]"
                   }`}
                 >
-                  <span>6. Activity Logs</span>
+                  <span>6. Logs &amp; Best Time</span>
                   <span
                     className={`shrink-0 rounded-lg px-2.5 py-0.5 text-base font-bold ${
                       activeTab === "logs"
@@ -717,7 +722,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                         : "bg-white text-[#18181B]"
                     }`}
                   >
-                    {submissionLogs.length + recentNotifications.length + recentRuns.length}
+                    {slotEvents.length + submissionLogs.length + recentNotifications.length}
                   </span>
                 </button>
               </div>
@@ -1532,6 +1537,8 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
           ) : entitlements.isDisabled ? null : (
             <ActivityLogsTab
               recentRuns={recentRuns}
+              slotEvents={slotEvents}
+              monitoredFranchiseCodes={monitoredFranchiseCodes}
               submissionLogs={submissionLogs}
               recentNotifications={recentNotifications}
               paymentRequests={paymentRequests}

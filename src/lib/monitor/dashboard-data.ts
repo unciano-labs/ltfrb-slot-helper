@@ -17,6 +17,11 @@ import {
   type PaymentRequestRow,
   type UserEntitlements,
 } from "@/lib/monitor/monetization";
+import {
+  deriveMovementsFromSnapshots,
+  type SlotMovementEvent,
+  type SnapshotHistoryRow,
+} from "@/lib/monitor/slot-analytics";
 import { getAuthenticatedUser } from "@/lib/supabase/auth-server";
 import { getTenantContext } from "@/lib/supabase/server";
 
@@ -69,6 +74,8 @@ export interface DashboardPayload {
   provinceSlots: SlotEntry[];
   lastRun: CronRunSummary | null;
   recentRuns: CronRunSummary[];
+  slotEvents: SlotMovementEvent[];
+  slotEventsSchemaReady: boolean;
   watchRules: WatchRule[];
   recentNotifications: NotificationLogSummary[];
   reservationProfiles: ApplicationProfile[];
@@ -128,6 +135,8 @@ export async function loadDashboardData(options?: {
   let monitoredFranchiseCodes: string[] = [];
   let lastRun: CronRunSummary | null = null;
   let recentRuns: CronRunSummary[] = [];
+  let slotEvents: SlotMovementEvent[] = [];
+  let slotEventsSchemaReady = false;
   let watchRules: WatchRule[] = [];
   let recentNotifications: NotificationLogSummary[] = [];
   let reservationProfiles: ApplicationProfile[] = [];
@@ -180,8 +189,8 @@ export async function loadDashboardData(options?: {
       isStale = Number.isNaN(ageMs) || ageMs >= SNAPSHOT_CACHE_MAX_AGE_MS;
     }
 
-    // Phase 2: load cached snapshot rows AND all user-scoped tables + billing in parallel
-    const [cachedRowsRes, userQueries, billingState] = await Promise.all([
+    // Phase 2: load cached snapshot rows AND all user-scoped tables + billing + slot events in parallel
+    const [cachedRowsRes, userQueries, billingState, slotEventsRes] = await Promise.all([
       latestCheckedAt
         ? supabase
             .from("ltfrb_slot_snapshots")
@@ -234,9 +243,40 @@ export async function loadDashboardData(options?: {
           ])
         : Promise.resolve(null),
       user ? loadUserBillingState(user.id, user.email) : Promise.resolve(null),
+      supabase
+        .from("ltfrb_slot_events")
+        .select("*")
+        .eq("website_id", websiteId)
+        .order("occurred_at", { ascending: false })
+        .limit(300),
     ]);
 
     billingResult = billingState;
+
+    const eventsMissing =
+      slotEventsRes.error?.code === "42P01" || slotEventsRes.error?.code === "PGRST205";
+    slotEventsSchemaReady = !eventsMissing;
+    const rawEvents = !eventsMissing
+      ? ((slotEventsRes.data as SlotMovementEvent[] | null) ?? [])
+      : [];
+
+    if (rawEvents.length > 0) {
+      slotEvents = rawEvents;
+    } else {
+      // Fallback: derive historical slot movements directly from stored snapshots
+      const { data: histRows } = await supabase
+        .from("ltfrb_slot_snapshots")
+        .select(
+          "id, checked_at, scope, slot_key, franchise_type_code, franchise_type_name, region_code, region_name, province_code, province_name, remaining"
+        )
+        .eq("website_id", websiteId)
+        .order("checked_at", { ascending: false })
+        .limit(1500);
+      slotEvents = deriveMovementsFromSnapshots((histRows as SnapshotHistoryRow[] | null) ?? []).slice(
+        0,
+        200
+      );
+    }
 
     const cachedRows = (cachedRowsRes.data as Array<Record<string, unknown>> | null) ?? [];
     if (latestCheckedAt && cachedRows.length > 0) {
@@ -318,6 +358,8 @@ export async function loadDashboardData(options?: {
     provinceSlots,
     lastRun,
     recentRuns,
+    slotEvents,
+    slotEventsSchemaReady,
     watchRules,
     recentNotifications,
     reservationProfiles,

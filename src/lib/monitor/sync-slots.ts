@@ -16,6 +16,7 @@ import {
   matchesWatchRule,
   shouldAutoSubmitProfile,
 } from "@/lib/monitor/rules";
+import { detectSlotMovements } from "@/lib/monitor/slot-analytics";
 import { sendSlotAvailableEmail } from "@/lib/notifications/email";
 import { getTenantContext } from "@/lib/supabase/server";
 
@@ -105,6 +106,17 @@ export async function runSlotMonitorSync(
 
       if (snapError) {
         throw new Error(`Failed to store slot snapshots: ${snapError.message}`);
+      }
+
+      const movements = detectSlotMovements({
+        websiteId,
+        allSlots,
+        prevRemainingMap: prevMap,
+        occurredAt: checkedAt,
+      });
+
+      if (movements.length > 0) {
+        await supabase.from("ltfrb_slot_events").insert(movements);
       }
     }
 
