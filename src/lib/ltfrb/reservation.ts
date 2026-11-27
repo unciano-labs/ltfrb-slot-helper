@@ -180,24 +180,34 @@ export async function attemptSlotReservation(
     }
 
     const normalizedUnits = (profile.units ?? []).map((u) => {
-      const { engine_number: rawEngine, ...rest } = u;
+      const docs = u.documents ?? {};
       return {
-        ...rest,
-        ...(rawEngine?.trim() ? { engine_number: rawEngine.trim() } : {}),
+        ...u,
+        engine_number: (u.engine_number ?? "").trim(),
         body_type: u.body_type || "Sedan",
-        documents: u.documents ?? {},
+        documents: {
+          affidavit_file: docs.affidavit_file ?? null,
+          cr_file: docs.cr_file ?? null,
+          delivery_receipt: docs.delivery_receipt ?? null,
+          or_file: docs.or_file ?? null,
+          sales_invoice_file: docs.sales_invoice_file ?? null,
+          unit_photo_file: docs.unit_photo_file ?? null,
+        },
       };
     });
 
+    const hasCustomDocs =
+      profile.custom_documents && Object.keys(profile.custom_documents).length > 0;
+
     const payload = {
       franchise_type: profile.franchise_type_code,
-      number_of_units: profile.number_of_units,
-      region_id: profile.region_id,
-      province_id: profile.province_id || undefined,
-      route_id: profile.route_id || undefined,
       is_fleet: profile.is_fleet,
+      number_of_units: profile.number_of_units,
+      province_id: profile.province_id ?? "",
+      region_id: profile.region_id,
+      route_id: profile.route_id ?? "",
       units: normalizedUnits,
-      custom_documents: profile.custom_documents ?? {},
+      ...(hasCustomDocs ? { custom_documents: profile.custom_documents } : {}),
     };
 
     let outcome = await deps.submitApplication(token, payload);

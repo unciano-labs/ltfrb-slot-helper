@@ -365,12 +365,18 @@ describe("atomic slot reservation lock and outcomes", () => {
     let capturedIsFleet = false;
     let capturedCount = 0;
     let capturedPlates: string[] = [];
+    let capturedRouteId: string | null | undefined;
+    let capturedEngineNumber: string | undefined;
+    let capturedDocKeys: string[] = [];
 
     const deps = makeDeps(state, {
       submitApplication: async (_token, payload) => {
         capturedIsFleet = payload.is_fleet;
         capturedCount = payload.number_of_units;
         capturedPlates = payload.units.map((u) => u.plate_number);
+        capturedRouteId = payload.route_id;
+        capturedEngineNumber = payload.units[0]?.engine_number;
+        capturedDocKeys = Object.keys(payload.units[0]?.documents ?? {}).sort();
         return {
           httpStatus: 201,
           result: "success",
@@ -381,6 +387,8 @@ describe("atomic slot reservation lock and outcomes", () => {
       },
     });
 
+    state.profile.units[0].engine_number = "";
+
     const outcome = await attemptSlotReservation(
       { profileId: "prof-1", userId: "user-1" },
       deps
@@ -390,6 +398,16 @@ describe("atomic slot reservation lock and outcomes", () => {
     assert.equal(capturedIsFleet, true);
     assert.equal(capturedCount, 2);
     assert.deepEqual(capturedPlates, ["ABC1111", "XYZ2222"]);
+    assert.equal(capturedRouteId, "");
+    assert.equal(capturedEngineNumber, "");
+    assert.deepEqual(capturedDocKeys, [
+      "affidavit_file",
+      "cr_file",
+      "delivery_receipt",
+      "or_file",
+      "sales_invoice_file",
+      "unit_photo_file",
+    ]);
 
     const badFleetCount = validateApplicationUnits({
       franchiseTypeCode: "TNVS",
