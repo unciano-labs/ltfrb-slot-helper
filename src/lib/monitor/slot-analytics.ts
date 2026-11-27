@@ -366,7 +366,7 @@ export function analyzeSlotTiming(
     recommendation =
       relevant.length > 0
         ? `Recorded ${decreaseCount} slot decrease(s) so far, with no refills/increases yet. Keep Automatic Check running so we capture the exact hours when LTFRB refills slots.`
-        : "No slot changes recorded yet. As our 15-minute checks observe LTFRB slots refilling, increasing, or decreasing, your best submission windows will appear here automatically.";
+        : "No slot changes recorded yet. As our 3-minute checks observe LTFRB slots refilling, increasing, or decreasing, your best submission windows will appear here automatically.";
   } else {
     const hourText = topHours.map((h) => h.label).join(", ");
     const dayText = topDays.map((d) => d.name).join(" / ");

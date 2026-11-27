@@ -273,7 +273,7 @@ export default function ActivityLogsTab({
             {filteredEvents.length === 0 ? (
               <p className="mt-3 text-lg text-[#52525B]">
                 No slot count changes observed yet for this filter. Keep Automatic Check running
-                every 15 minutes to log exact movement timestamps.
+                every 3 minutes to log exact movement timestamps.
               </p>
             ) : (
               <div className="mt-4 space-y-3">
@@ -450,7 +450,7 @@ export default function ActivityLogsTab({
                       <p className="text-xl font-bold text-[#0A0A0A]">
                         {run.trigger_source === "manual"
                           ? "Manual Slot Check"
-                          : "Automatic Check (Every 15 Minutes)"}
+                          : "Automatic Check (Every 3 Minutes)"}
                       </p>
                       <p className="mt-1 text-base text-[#52525B]">
                         {formatManilaTime(run.finished_at ?? run.started_at)} •{" "}

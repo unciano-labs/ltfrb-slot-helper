@@ -157,7 +157,7 @@ export default function LandingPage() {
 
             <p className="mt-6 max-w-2xl text-xl leading-relaxed text-[#EFF6FF]">
               Applying on <strong>ltfrb-foa.ph</strong> is hard when slots fill up in minutes.
-              LTFRB Slot Helper checks available slots automatically every 15 minutes, emails you
+              LTFRB Slot Helper checks available slots automatically every 3 minutes, emails you
               when a spot opens, and submits your prepared application for you.
             </p>
 
@@ -279,7 +279,7 @@ export default function LandingPage() {
                 </h3>
                 <ul className="mt-4 space-y-3 text-lg leading-relaxed text-[#1E3A8A]">
                   <li>
-                    • <strong>Auto-Check Every 15 Minutes:</strong> Watches your chosen franchises
+                    • <strong>Auto-Check Every 3 Minutes:</strong> Watches your chosen franchises
                     and emails you immediately when slots open or increase.
                   </li>
                   <li>
@@ -422,7 +422,7 @@ export default function LandingPage() {
                   Get Alerts &amp; Reserve
                 </h3>
                 <p className="mt-3 text-lg leading-relaxed text-[#52525B]">
-                  Every 15 minutes we check slots, email you updates, and submit automatically when
+                  Every 3 minutes we check slots, email you updates, and submit automatically when
                   your trigger fires — then stop as soon as you get your Case Number.
                 </p>
               </div>
@@ -458,7 +458,7 @@ export default function LandingPage() {
                   ₱1,699 <span className="text-xl font-normal text-[#DBEAFE]">/ year</span>
                 </p>
                 <ul className="mt-6 space-y-3 text-lg leading-relaxed text-[#EFF6FF]">
-                  <li>• Automatic LTFRB slot checking every 15 minutes</li>
+                  <li>• Automatic LTFRB slot checking every 3 minutes</li>
                   <li>• Instant Gmail notifications when slots open or increase</li>
                   <li>• 1 Auto-Reserve vehicle profile included</li>
                   <li>• 1 Monitored Alert slot included</li>
@@ -527,7 +527,7 @@ export default function LandingPage() {
           {[
             {
               q: "Do I need to keep my phone or computer open?",
-              a: "No. Once you save your alert and reservation details, checks run automatically on the server every 15 minutes even when your browser is closed.",
+              a: "No. Once you save your alert and reservation details, checks run automatically on the server every 3 minutes even when your browser is closed.",
             },
             {
               q: "What if I only have my Sales Invoice and no OR/CR yet?",
@@ -559,8 +559,8 @@ export default function LandingPage() {
             <h2 className="text-3xl font-bold sm:text-4xl">Ready to Watch Your LTFRB Slots?</h2>
             <p className="mx-auto mt-3 max-w-2xl text-xl leading-relaxed text-[#EFF6FF]">
               {summary.userEmail
-                ? "Go to your dashboard to manage your 15-minute email alerts and automatic reservation."
-                : "Sign in or create a free account first to access your dashboard, 15-minute email alerts, and automatic reservation."}
+                ? "Go to your dashboard to manage your 3-minute email alerts and automatic reservation."
+                : "Sign in or create a free account first to access your dashboard, 3-minute email alerts, and automatic reservation."}
             </p>
             <div className="mt-8 flex flex-col justify-center gap-4 sm:flex-row">
               <Link

@@ -27,7 +27,8 @@ Vercel Hobby limits `vercel.json` crons to once per day, so do **not** put `*/15
 2. **`cron-job.org` (Exact, free, zero code setup)**:
    - Create a free cron job pointing to `https://ltfrb-slot-helper.vercel.app/api/cron/check-slots`
    - Method: `POST`
-   - Schedule: Every `15` minutes
+   - Schedule: Every `3` minutes (`*/3 * * * *`)
+   - Request timeout: `30` seconds
    - Header: `Authorization: Bearer <your CRON_SECRET>`
 
 3. **GitHub Actions (`.github/workflows/cron-check-slots.yml`)**:

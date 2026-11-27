@@ -521,7 +521,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
   const activeSectionMeta: Record<ActiveTab, { title: string; subtitle: string }> = {
     slots: {
       title: "Live Slot Explorer",
-      subtitle: "Monitor LTFRB slot availability across regions and provinces every 15 minutes.",
+      subtitle: "Monitor LTFRB slot availability across regions and provinces every 3 minutes.",
     },
     alerts: {
       title: "Email Alert Rules",
@@ -563,7 +563,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
       <p className="mt-3 max-w-2xl text-lg leading-relaxed text-[#52525B]">
         {entitlements.status === "pending"
           ? "Your GCash/Maya payment proof is currently waiting for SuperAdmin approval. Once approved, all automation features and notifications will unlock automatically."
-          : "Get 1 full year of automated 15-minute slot checks, Gmail alerts, 1 Auto-Reserve vehicle profile, and 1 Alert slot (+₱100 per extra profile or alert slot)."}
+          : "Get 1 full year of automated 3-minute slot checks, Gmail alerts, 1 Auto-Reserve vehicle profile, and 1 Alert slot (+₱100 per extra profile or alert slot)."}
       </p>
       <div className="mt-6 flex flex-wrap gap-3">
         <button
@@ -1087,7 +1087,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
           (!user ? (
             <SignInRequiredCard
               title="Sign In to Set Email Alerts"
-              description="Please sign in to your account so you can save which franchise types to watch and receive automatic email notifications every 15 minutes."
+              description="Please sign in to your account so you can save which franchise types to watch and receive automatic email notifications every 3 minutes."
             />
           ) : entitlements.isDisabled ? null : !entitlements.isActivePlan ? (
             planRequiredCard("Email Alerts")
@@ -1101,7 +1101,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                       Your Saved Email Alerts
                     </h2>
                     <p className="mt-1 text-lg text-[#4B5563]">
-                      Watches your chosen franchise type and area automatically every 15 minutes.
+                      Watches your chosen franchise type and area automatically every 3 minutes.
                     </p>
                   </div>
                   <button
@@ -1140,7 +1140,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                           </p>
                           <p className="mt-1 text-base text-[#4B5563]">
                             Status:{" "}
-                            <strong>{rule.is_active ? "Watching every 15 mins" : "Paused"}</strong>
+                            <strong>{rule.is_active ? "Watching every 3 mins" : "Paused"}</strong>
                           </p>
                           <p className="mt-1 text-base text-[#4B5563]">
                             Emails when:{" "}
@@ -1200,7 +1200,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
               <ModalDialog
                 open={isAlertModalOpen}
                 title="Send Me an Email When Slots Open"
-                subtitle="Pick the franchise type and area you want to watch. We check automatically every 15 minutes."
+                subtitle="Pick the franchise type and area you want to watch. We check automatically every 3 minutes."
                 titleId="alert-modal-title"
                 maxWidthClass="max-w-2xl"
                 onClose={closeAlertModal}
@@ -1367,6 +1367,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                         <option value="60">At most once every hour</option>
                         <option value="180">At most once every 3 hours</option>
                         <option value="15">Every 15 minutes while open</option>
+                        <option value="3">Every 3 minutes while open</option>
                         <option value="0">Only once when slots first open</option>
                       </select>
                     </div>

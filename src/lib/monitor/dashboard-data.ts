@@ -26,7 +26,7 @@ import { normalizeSubmissionLogRow } from "@/lib/monitor/submission-trigger";
 import { getAuthenticatedUser } from "@/lib/supabase/auth-server";
 import { getTenantContext } from "@/lib/supabase/server";
 
-export const SNAPSHOT_CACHE_MAX_AGE_MS = 15 * 60 * 1000; // 15 minutes (matches cron interval)
+export const SNAPSHOT_CACHE_MAX_AGE_MS = 3 * 60 * 1000; // 3 minutes (matches cron interval)
 
 export type SlotLoadMode = "cached" | "auto" | "live";
 
@@ -175,7 +175,7 @@ export async function loadDashboardData(options?: {
         .select("*")
         .eq("website_id", websiteId)
         .order("started_at", { ascending: false })
-        .limit(40),
+        .limit(60),
     ]);
 
     if (authUser) {

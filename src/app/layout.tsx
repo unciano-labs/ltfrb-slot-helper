@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "LTFRB Slot Helper",
   description:
-    "Check open LTFRB franchise slots, get email alerts every 15 minutes, and manage your LTFRB account.",
+    "Check open LTFRB franchise slots, get email alerts every 3 minutes, and manage your LTFRB account.",
 };
 
 export default function RootLayout({
