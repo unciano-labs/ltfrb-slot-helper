@@ -213,7 +213,7 @@ export async function loadDashboardData(options?: {
               .eq("website_id", websiteId)
               .eq("user_id", user.id)
               .order("sent_at", { ascending: false })
-              .limit(20),
+              .limit(40),
             supabase
               .from("ltfrb_application_profiles")
               .select("*")
