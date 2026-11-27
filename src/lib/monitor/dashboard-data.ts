@@ -26,9 +26,71 @@ import { normalizeSubmissionLogRow } from "@/lib/monitor/submission-trigger";
 import { getAuthenticatedUser } from "@/lib/supabase/auth-server";
 import { getTenantContext } from "@/lib/supabase/server";
 
-export const SNAPSHOT_CACHE_MAX_AGE_MS = 3 * 60 * 1000; // 3 minutes (matches cron interval)
+export const SNAPSHOT_CACHE_MAX_AGE_MS = 4 * 60 * 1000; // 4 minutes (3-min cron + jitter buffer)
 
 export type SlotLoadMode = "cached" | "auto" | "live";
+
+export interface SyncPulse {
+  pulseKey: string;
+  latestRunId: string | null;
+  latestFinishedAt: string | null;
+  latestStatus: string | null;
+  latestCheckedAt: string | null;
+}
+
+/**
+ * Lightweight 1-row check used by the browser every 15s (and on tab focus)
+ * to detect completed cron runs or snapshot updates without reloading full payloads.
+ */
+export async function loadSyncPulse(): Promise<SyncPulse> {
+  if (!isSupabaseConfigured()) {
+    return {
+      pulseKey: "",
+      latestRunId: null,
+      latestFinishedAt: null,
+      latestStatus: null,
+      latestCheckedAt: null,
+    };
+  }
+  const { supabase, websiteId } = getTenantContext();
+  const [runRes, snapRes] = await Promise.all([
+    supabase
+      .from("ltfrb_cron_runs")
+      .select("id, finished_at, started_at, status")
+      .eq("website_id", websiteId)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("ltfrb_slot_snapshots")
+      .select("checked_at")
+      .eq("website_id", websiteId)
+      .order("checked_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const run = runRes.data as {
+    id?: string;
+    finished_at?: string | null;
+    started_at?: string | null;
+    status?: string | null;
+  } | null;
+  const snap = snapRes.data as { checked_at?: string | null } | null;
+
+  const latestRunId = run?.id ?? null;
+  const latestFinishedAt = run?.finished_at ?? run?.started_at ?? null;
+  const latestStatus = run?.status ?? null;
+  const latestCheckedAt = snap?.checked_at ?? null;
+
+  return {
+    pulseKey: `${latestRunId ?? ""}|${latestFinishedAt ?? ""}|${latestStatus ?? ""}|${latestCheckedAt ?? ""}`,
+    latestRunId,
+    latestFinishedAt,
+    latestStatus,
+    latestCheckedAt,
+  };
+}
 
 export interface SavedAccountSummary {
   id: string;

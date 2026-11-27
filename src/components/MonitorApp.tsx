@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ActivityLogsTab from "@/components/ActivityLogsTab";
 import AutoReserveTab from "@/components/AutoReserveTab";
 import BillingTab from "@/components/BillingTab";
@@ -200,8 +200,18 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
     }
   }, []);
 
+  const checkingNowRef = useRef(false);
+  const pulseKeyRef = useRef<string>(
+    `${initialData?.lastRun?.id ?? ""}|${initialData?.lastRun?.finished_at ?? initialData?.lastRun?.started_at ?? ""}|${initialData?.lastRun?.status ?? ""}|${initialData?.fetchedAt ?? ""}`
+  );
+  const lastPulsePollMsRef = useRef<number>(0);
+
+  useEffect(() => {
+    checkingNowRef.current = checkingNow;
+  }, [checkingNow]);
+
   const loadData = useCallback(
-    async (mode: SlotLoadMode = "cached") => {
+    async (mode: SlotLoadMode = "cached", opts?: { silent?: boolean }) => {
       try {
         const slotsRes = await fetch(`/api/slots?mode=${mode}`, { cache: "no-store" });
         const slotsJson = (await slotsRes.json()) as DashboardPayload & { error?: string };
@@ -210,21 +220,25 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
         }
 
         applyPayload(slotsJson);
+        pulseKeyRef.current = `${slotsJson.lastRun?.id ?? ""}|${slotsJson.lastRun?.finished_at ?? slotsJson.lastRun?.started_at ?? ""}|${slotsJson.lastRun?.status ?? ""}|${slotsJson.fetchedAt ?? ""}`;
 
         if (
           mode === "cached" &&
+          !opts?.silent &&
           (slotsJson.regionSlots.length === 0 || slotsJson.isStale)
         ) {
           void refreshLiveSlots();
         }
       } catch (err) {
-        setBanner({
-          kind: "error",
-          text:
-            err instanceof Error
-              ? err.message
-              : "We could not connect to LTFRB right now. Please try again in a minute.",
-        });
+        if (!opts?.silent) {
+          setBanner({
+            kind: "error",
+            text:
+              err instanceof Error
+                ? err.message
+                : "We could not connect to LTFRB right now. Please try again in a minute.",
+          });
+        }
       } finally {
         setLoading(false);
       }
@@ -243,6 +257,53 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
     }
     void loadData("cached");
   }, [applyPayload, initialData, loadData, refreshLiveSlots]);
+
+  // Realtime auto-sync: poll lightweight pulse every 15s + check immediately on tab focus
+  useEffect(() => {
+    if (!supabaseConfigured) return;
+
+    let active = true;
+
+    async function checkPulse(force = false) {
+      if (!active || checkingNowRef.current) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+
+      const now = Date.now();
+      if (!force && now - lastPulsePollMsRef.current < 4_000) return;
+      lastPulsePollMsRef.current = now;
+
+      try {
+        const res = await fetch("/api/slots?mode=pulse", { cache: "no-store" });
+        if (!res.ok || !active) return;
+        const pulse = (await res.json()) as { pulseKey?: string };
+        if (pulse.pulseKey && pulse.pulseKey !== pulseKeyRef.current) {
+          await loadData("cached", { silent: true });
+        }
+      } catch {
+        // Ignore transient offline errors during background polling
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      void checkPulse(true);
+    }, 15_000);
+
+    function handleVisibilityOrFocus() {
+      if (document.visibilityState === "visible") {
+        void checkPulse(false);
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+    window.addEventListener("focus", handleVisibilityOrFocus);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+    };
+  }, [loadData, supabaseConfigured]);
 
   const hasAccountFranchiseFilter =
     Boolean(user) && monitoredFranchiseCodes.length > 0 && !showAllPublicSlots;
@@ -817,6 +878,11 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
                   <p className="mt-1 text-lg font-bold text-[#0A0A0A]">
                     {formatManilaTime(lastRun?.finished_at ?? lastRun?.started_at ?? fetchedAt)}
                   </p>
+                  {supabaseConfigured && (
+                    <p className="mt-1 text-base font-bold text-[#14532D]">
+                      Live Auto-Sync ON (15s)
+                    </p>
+                  )}
                 </div>
 
                 <div className="rounded-xl bg-[#EFF6FF] p-4 sm:p-5">
