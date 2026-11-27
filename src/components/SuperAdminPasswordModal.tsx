@@ -52,7 +52,7 @@ export default function SuperAdminPasswordModal({
       role={inlineMode ? undefined : "dialog"}
       aria-modal={inlineMode ? undefined : "true"}
       aria-labelledby="superadmin-verify-title"
-      className="w-full max-w-lg rounded-2xl bg-white p-7 sm:p-9"
+      className="max-h-[88dvh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 sm:p-9"
     >
       <span className="inline-block rounded-xl bg-[#102E7A] px-4 py-1.5 text-base font-bold text-white">
         Restricted SuperAdmin Access
@@ -131,7 +131,7 @@ export default function SuperAdminPasswordModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0A0A0A]/60 px-4 py-6">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-[#0A0A0A]/60 p-4 pt-10 sm:items-center sm:p-6">
       {card}
     </div>
   );

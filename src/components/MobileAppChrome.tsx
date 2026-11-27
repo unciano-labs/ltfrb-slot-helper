@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import ModalDialog from "@/components/ModalDialog";
 
@@ -44,21 +44,56 @@ export default function MobileAppChrome({
   onSignOut,
 }: MobileAppChromeProps) {
   const [moreSheetOpen, setMoreSheetOpen] = useState(false);
+  const [dockVisible, setDockVisible] = useState(true);
+  const lastScrollYRef = useRef(0);
+
+  // Classic iOS scroll behavior: hide floating tab bar when scrolling down, show on scroll up / top / bottom
+  useEffect(() => {
+    lastScrollYRef.current = typeof window !== "undefined" ? window.scrollY : 0;
+
+    function handleScroll() {
+      const currentY = Math.max(0, window.scrollY);
+      const delta = currentY - lastScrollYRef.current;
+
+      const nearTop = currentY <= 32;
+      const nearBottom =
+        window.innerHeight + currentY >= document.documentElement.scrollHeight - 40;
+
+      if (nearTop || nearBottom) {
+        setDockVisible(true);
+      } else if (delta > 8 && currentY > 56) {
+        setDockVisible(false);
+      } else if (delta < -6) {
+        setDockVisible(true);
+      }
+
+      lastScrollYRef.current = currentY;
+    }
+
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const isMoreActive = activeTab === "account" || activeTab === "billing" || moreSheetOpen;
+  const showFloatingDock = dockVisible || moreSheetOpen;
 
-  function chooseTabFromSheet(tab: AppTabId) {
+  function chooseTab(tab: AppTabId) {
     setMoreSheetOpen(false);
+    setDockVisible(true);
     onSelectTab(tab);
   }
 
   return (
     <>
       {/* Sticky Native Mobile/Tablet App Bar */}
-      <div className="sticky top-0 z-30 bg-white px-4 py-3 shadow-[0_2px_12px_rgba(10,10,10,0.06)] lg:hidden">
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#102E7A] text-base font-bold text-white">
+      <div
+        className={`sticky top-0 z-30 bg-white/95 px-4 py-2.5 backdrop-blur-md shadow-[0_2px_12px_rgba(10,10,10,0.06)] transition-transform duration-300 ease-out lg:hidden ${
+          dockVisible ? "translate-y-0" : "-translate-y-full"
+        }`}
+      >
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#102E7A] text-base font-bold text-white">
               LT
             </span>
             <div className="min-w-0 flex-1">
@@ -71,30 +106,43 @@ export default function MobileAppChrome({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onCheckNow}
-            disabled={checkingNow}
-            className="min-h-12 shrink-0 rounded-xl bg-[#1447E6] px-4 py-2.5 text-base font-bold text-white hover:bg-[#1039B8] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-60"
-          >
-            {checkingNow ? "Checking..." : "Check Now"}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={onCheckNow}
+              disabled={checkingNow}
+              className="min-h-12 shrink-0 rounded-xl bg-[#1447E6] px-4 py-2 text-base font-bold text-white hover:bg-[#1039B8] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-60"
+            >
+              {checkingNow ? "Checking..." : "Check"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setMoreSheetOpen(true)}
+              aria-label="Open Navigation Menu"
+              className="min-h-12 shrink-0 rounded-xl bg-[#F4F4F5] px-3.5 py-2 text-base font-bold text-[#0A0A0A] hover:bg-[#E4E4E7] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
+            >
+              Menu
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Fixed Native Bottom Tab Bar (Mobile & Tablet) */}
+      {/* Floating iOS-Style Pill Bottom Tab Bar (auto-hides on scroll down, returns on scroll up) */}
       <nav
         aria-label="Mobile Navigation"
-        className="fixed inset-x-0 bottom-0 z-40 bg-white px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-4px_20px_rgba(10,10,10,0.08)] lg:hidden"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-40 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:hidden"
       >
-        <div className="mx-auto flex max-w-2xl items-stretch justify-around gap-1">
+        <div
+          className={`mx-auto flex max-w-md items-stretch justify-around gap-1 rounded-3xl bg-white/95 p-1.5 backdrop-blur-md shadow-[0_8px_28px_rgba(10,10,10,0.16)] transition-all duration-300 ease-out ${
+            showFloatingDock
+              ? "pointer-events-auto translate-y-0 opacity-100"
+              : "pointer-events-none translate-y-28 opacity-0"
+          }`}
+        >
           <button
             type="button"
-            onClick={() => {
-              setMoreSheetOpen(false);
-              onSelectTab("slots");
-            }}
-            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-base font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+            onClick={() => chooseTab("slots")}
+            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-base font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
               activeTab === "slots" && !moreSheetOpen
                 ? "bg-[#EFF6FF] text-[#1447E6]"
                 : "text-[#3F3F46] hover:bg-[#F4F4F5]"
@@ -118,11 +166,8 @@ export default function MobileAppChrome({
 
           <button
             type="button"
-            onClick={() => {
-              setMoreSheetOpen(false);
-              onSelectTab("alerts");
-            }}
-            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-base font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+            onClick={() => chooseTab("alerts")}
+            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-base font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
               activeTab === "alerts" && !moreSheetOpen
                 ? "bg-[#EFF6FF] text-[#1447E6]"
                 : "text-[#3F3F46] hover:bg-[#F4F4F5]"
@@ -144,11 +189,8 @@ export default function MobileAppChrome({
 
           <button
             type="button"
-            onClick={() => {
-              setMoreSheetOpen(false);
-              onSelectTab("reserve");
-            }}
-            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-base font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+            onClick={() => chooseTab("reserve")}
+            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-base font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
               activeTab === "reserve" && !moreSheetOpen
                 ? "bg-[#EFF6FF] text-[#1447E6]"
                 : "text-[#3F3F46] hover:bg-[#F4F4F5]"
@@ -170,11 +212,8 @@ export default function MobileAppChrome({
 
           <button
             type="button"
-            onClick={() => {
-              setMoreSheetOpen(false);
-              onSelectTab("logs");
-            }}
-            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-base font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+            onClick={() => chooseTab("logs")}
+            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-base font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
               activeTab === "logs" && !moreSheetOpen
                 ? "bg-[#EFF6FF] text-[#1447E6]"
                 : "text-[#3F3F46] hover:bg-[#F4F4F5]"
@@ -197,7 +236,7 @@ export default function MobileAppChrome({
           <button
             type="button"
             onClick={() => setMoreSheetOpen(true)}
-            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-base font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
+            className={`flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 text-base font-bold transition-colors focus:outline-none focus:ring-4 focus:ring-blue-700/30 ${
               isMoreActive
                 ? "bg-[#EFF6FF] text-[#1447E6]"
                 : "text-[#3F3F46] hover:bg-[#F4F4F5]"
@@ -219,10 +258,10 @@ export default function MobileAppChrome({
         </div>
       </nav>
 
-      {/* Native-Style More & Account Bottom Sheet Modal */}
+      {/* Native-Style Navigation & Account Bottom Sheet Modal */}
       <ModalDialog
         open={moreSheetOpen}
-        title="Account & Settings"
+        title="Menu & Account"
         subtitle={userEmail ?? "Operator Dashboard"}
         titleId="mobile-more-sheet-title"
         maxWidthClass="max-w-lg"
@@ -245,16 +284,36 @@ export default function MobileAppChrome({
           </div>
 
           <div className="space-y-2.5">
+            {[
+              { id: "slots" as const, label: "1. Check Open Slots" },
+              { id: "alerts" as const, label: "2. Email Alerts" },
+              { id: "reserve" as const, label: "4. Auto-Reserve" },
+              { id: "logs" as const, label: "6. Logs & Best Time" },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => chooseTab(item.id)}
+                className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-lg font-bold transition-colors ${
+                  activeTab === item.id
+                    ? "bg-[#1447E6] text-white"
+                    : "bg-[#F4F4F5] text-[#0A0A0A] hover:bg-[#E4E4E7]"
+                }`}
+              >
+                <span>{item.label}</span>
+              </button>
+            ))}
+
             <button
               type="button"
-              onClick={() => chooseTabFromSheet("account")}
-              className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-lg font-bold transition-colors ${
+              onClick={() => chooseTab("account")}
+              className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-lg font-bold transition-colors ${
                 activeTab === "account"
                   ? "bg-[#1447E6] text-white"
                   : "bg-[#F4F4F5] text-[#0A0A0A] hover:bg-[#E4E4E7]"
               }`}
             >
-              <span>LTFRB Account Login</span>
+              <span>3. LTFRB Account Login</span>
               <span
                 className={`rounded-lg px-3 py-1 text-base font-bold ${
                   activeTab === "account"
@@ -270,14 +329,14 @@ export default function MobileAppChrome({
 
             <button
               type="button"
-              onClick={() => chooseTabFromSheet("billing")}
-              className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3.5 text-left text-lg font-bold transition-colors ${
+              onClick={() => chooseTab("billing")}
+              className={`flex min-h-12 w-full items-center justify-between gap-3 rounded-xl px-4 py-3 text-left text-lg font-bold transition-colors ${
                 activeTab === "billing"
                   ? "bg-[#1447E6] text-white"
                   : "bg-[#F4F4F5] text-[#0A0A0A] hover:bg-[#E4E4E7]"
               }`}
             >
-              <span>Plan &amp; Billing</span>
+              <span>5. Plan &amp; Billing</span>
               <span
                 className={`rounded-lg px-3 py-1 text-base font-bold ${
                   activeTab === "billing" ? "bg-[#102E7A] text-white" : planBadgeStyle
@@ -294,7 +353,7 @@ export default function MobileAppChrome({
                   setMoreSheetOpen(false);
                   onOpenSuperAdmin();
                 }}
-                className="min-h-12 w-full rounded-xl bg-[#102E7A] px-4 py-3.5 text-left text-lg font-bold text-white hover:bg-[#0B225C]"
+                className="min-h-12 w-full rounded-xl bg-[#102E7A] px-4 py-3 text-left text-lg font-bold text-white hover:bg-[#0B225C]"
               >
                 SuperAdmin Panel
               </button>
@@ -303,7 +362,7 @@ export default function MobileAppChrome({
             <Link
               href="/"
               onClick={() => setMoreSheetOpen(false)}
-              className="flex min-h-12 w-full items-center justify-between rounded-xl bg-[#F4F4F5] px-4 py-3.5 text-lg font-bold text-[#0A0A0A] hover:bg-[#E4E4E7]"
+              className="flex min-h-12 w-full items-center justify-between rounded-xl bg-[#F4F4F5] px-4 py-3 text-lg font-bold text-[#0A0A0A] hover:bg-[#E4E4E7]"
             >
               <span>Public Landing Page</span>
             </Link>
@@ -315,7 +374,7 @@ export default function MobileAppChrome({
                   setMoreSheetOpen(false);
                   onSignOut();
                 }}
-                className="min-h-12 w-full rounded-xl bg-[#FEE2E2] px-4 py-3.5 text-left text-lg font-bold text-[#7F1D1D] hover:bg-[#FECACA]"
+                className="min-h-12 w-full rounded-xl bg-[#FEE2E2] px-4 py-3 text-left text-lg font-bold text-[#7F1D1D] hover:bg-[#FECACA]"
               >
                 Sign Out
               </button>
@@ -323,7 +382,7 @@ export default function MobileAppChrome({
               <Link
                 href="/login"
                 onClick={() => setMoreSheetOpen(false)}
-                className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#1447E6] px-4 py-3.5 text-lg font-bold text-white hover:bg-[#1039B8]"
+                className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#1447E6] px-4 py-3 text-lg font-bold text-white hover:bg-[#1039B8]"
               >
                 Sign In
               </Link>
