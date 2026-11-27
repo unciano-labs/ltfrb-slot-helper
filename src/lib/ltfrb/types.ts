@@ -79,7 +79,7 @@ export interface VehicleUnitInput {
   year_model: number;
   body_type: string;
   ev_type?: "BEV" | "PHEV" | "HEV";
-  engine_number: string;
+  engine_number?: string;
   chassis_number: string;
   color?: string;
   documents?: UnitDocuments;

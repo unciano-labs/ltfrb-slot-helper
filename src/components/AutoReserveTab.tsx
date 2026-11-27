@@ -416,7 +416,7 @@ export default function AutoReserveTab({
           year_model: Number(u.year_model) || new Date().getFullYear(),
           body_type: u.body_type.trim() || "Sedan",
           ...(u.ev_type ? { ev_type: u.ev_type } : {}),
-          engine_number: u.engine_number.trim(),
+          ...(u.engine_number.trim() ? { engine_number: u.engine_number.trim() } : {}),
           chassis_number: u.chassis_number.trim(),
           documents,
         };
@@ -934,15 +934,14 @@ export default function AutoReserveTab({
                       htmlFor={`veh-engine-${idx}`}
                       className="block text-lg font-bold text-[#17191C]"
                     >
-                      Engine Number
+                      Engine Number (Optional)
                     </label>
                     <input
                       id={`veh-engine-${idx}`}
                       type="text"
-                      required={unit.ev_type !== "BEV" && unit.ev_type !== "PHEV"}
                       value={unit.engine_number}
                       onChange={(e) => updateUnitField(idx, "engine_number", e.target.value)}
-                      placeholder="Engine serial number"
+                      placeholder="Optional — leave blank if not required"
                       className="mt-2 min-h-12 w-full rounded-xl bg-white px-4 py-3 text-lg text-[#17191C] focus:outline-none focus:ring-4 focus:ring-blue-700/30"
                     />
                   </div>

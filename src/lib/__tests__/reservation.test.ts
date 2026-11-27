@@ -399,5 +399,14 @@ describe("atomic slot reservation lock and outcomes", () => {
       requireDocuments: true,
     });
     assert.equal(badFleetCount.valid, false);
+
+    const optionalEngine = validateApplicationUnits({
+      franchiseTypeCode: "TNVS",
+      isFleet: false,
+      numberOfUnits: 1,
+      units: [{ ...state.profile.units[0], engine_number: "" }],
+      requireDocuments: true,
+    });
+    assert.equal(optionalEngine.valid, true);
   });
 });

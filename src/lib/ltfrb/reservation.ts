@@ -179,11 +179,15 @@ export async function attemptSlotReservation(
       token = refreshed.token;
     }
 
-    const normalizedUnits = (profile.units ?? []).map((u) => ({
-      ...u,
-      body_type: u.body_type || "Sedan",
-      documents: u.documents ?? {},
-    }));
+    const normalizedUnits = (profile.units ?? []).map((u) => {
+      const { engine_number: rawEngine, ...rest } = u;
+      return {
+        ...rest,
+        ...(rawEngine?.trim() ? { engine_number: rawEngine.trim() } : {}),
+        body_type: u.body_type || "Sedan",
+        documents: u.documents ?? {},
+      };
+    });
 
     const payload = {
       franchise_type: profile.franchise_type_code,

@@ -464,13 +464,6 @@ export function validateApplicationUnits(params: {
       };
     }
 
-    if (unit.ev_type !== "BEV" && unit.ev_type !== "PHEV" && !unit?.engine_number?.trim()) {
-      return {
-        valid: false,
-        error: `${label}Please enter the Engine Number.`,
-      };
-    }
-
     if (requireDocuments && !hasValidOwnershipDocument(unit.documents)) {
       return {
         valid: false,
