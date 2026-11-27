@@ -7,6 +7,7 @@ import ActivityLogsTab from "@/components/ActivityLogsTab";
 import AutoReserveTab from "@/components/AutoReserveTab";
 import BillingTab from "@/components/BillingTab";
 import FranchisePickerCard from "@/components/FranchisePickerCard";
+import MobileAppChrome from "@/components/MobileAppChrome";
 import ModalDialog from "@/components/ModalDialog";
 import SignInRequiredCard from "@/components/SignInRequiredCard";
 import SuperAdminPasswordModal from "@/components/SuperAdminPasswordModal";
@@ -645,11 +646,41 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
     (p) => p.is_armed && p.lock_status !== "submitted"
   ).length;
 
+  const planBadgeText = entitlements.isActivePlan
+    ? "Active"
+    : entitlements.status === "pending"
+    ? "Pending"
+    : "₱1,699";
+  const planBadgeStyle = entitlements.isActivePlan
+    ? "bg-[#DCFCE7] text-[#14532D]"
+    : entitlements.status === "pending"
+    ? "bg-[#DBEAFE] text-[#1E3A8A]"
+    : "bg-[#FEE2E2] text-[#7F1D1D]";
+
   return (
-    <div className="min-h-screen bg-[#F4F4F5] text-[#0A0A0A]">
-      <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:items-start lg:gap-8 lg:px-8 lg:py-8">
-        {/* Classic Left Navigation Sidebar */}
-        <aside className="w-full shrink-0 lg:sticky lg:top-8 lg:w-80">
+    <div className="min-h-screen bg-[#F4F4F5] pb-28 text-[#0A0A0A] lg:pb-8">
+      <MobileAppChrome
+        activeTab={activeTab}
+        screenTitle={activeSectionMeta[activeTab].title}
+        userEmail={user?.email ?? null}
+        supabaseConfigured={supabaseConfigured}
+        checkingNow={checkingNow}
+        openSlotsCount={openSlotsCount}
+        alertsCount={watchRules.length}
+        armedProfilesCount={armedProfilesCount}
+        hasSavedAccount={Boolean(savedAccount)}
+        planBadgeText={planBadgeText}
+        planBadgeStyle={planBadgeStyle}
+        canUseSuperAdmin={canUseSuperAdmin}
+        onSelectTab={selectTab}
+        onCheckNow={() => void handleCheckNow()}
+        onOpenSuperAdmin={() => setShowSuperAdminPrompt(true)}
+        onSignOut={() => void handleSignOut()}
+      />
+
+      <div className="mx-auto flex max-w-7xl flex-col gap-5 px-4 py-4 sm:px-6 lg:flex-row lg:items-start lg:gap-8 lg:px-8 lg:py-8">
+        {/* Desktop Left Navigation Sidebar (hidden on mobile & tablet, replaced by MobileAppChrome) */}
+        <aside className="hidden w-full shrink-0 lg:sticky lg:top-8 lg:block lg:w-80">
           <div className="rounded-2xl bg-white p-6">
             {/* Brand Identity */}
             <div className="flex items-center gap-3.5">
@@ -848,10 +879,14 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
         </aside>
 
         {/* Right Workspace Column */}
-        <main className="min-w-0 flex-1 space-y-6">
-          {/* Top Workspace Header & Status Cards */}
-          <header className="rounded-2xl bg-white p-6 sm:p-8">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <main className="min-w-0 flex-1 space-y-5 lg:space-y-6">
+          {/* Top Workspace Header (Desktop always; Mobile/Tablet shows compact 3-card strip on Slots only) */}
+          <header
+            className={`rounded-2xl bg-white p-4 sm:p-5 lg:p-8 ${
+              activeTab === "slots" ? "block" : "hidden lg:block"
+            }`}
+          >
+            <div className="hidden flex-col gap-5 sm:flex-row sm:items-center sm:justify-between lg:flex">
               <div className="min-w-0">
                 <h2 className="text-2xl font-bold tracking-tight text-[#0A0A0A] sm:text-3xl">
                   {activeSectionMeta[activeTab].title}
@@ -873,30 +908,30 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
 
             {/* Clean 3-Card Summary Row (shown on Check Open Slots) */}
             {activeTab === "slots" && (
-              <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-                <div className="rounded-xl bg-[#F4F4F5] p-4 sm:p-5">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:mt-6 lg:gap-4">
+                <div className="rounded-xl bg-[#F4F4F5] p-3.5 sm:p-4 lg:p-5">
                   <p className="text-base font-bold text-[#52525B]">Last Checked</p>
-                  <p className="mt-1 text-lg font-bold text-[#0A0A0A]">
+                  <p className="mt-1 text-base font-bold text-[#0A0A0A] lg:text-lg">
                     {formatManilaTime(lastRun?.finished_at ?? lastRun?.started_at ?? fetchedAt)}
                   </p>
                   {supabaseConfigured && (
-                    <p className="mt-1 text-base font-bold text-[#14532D]">
+                    <p className="mt-0.5 text-base font-bold text-[#14532D]">
                       Live Auto-Sync ON (15s)
                     </p>
                   )}
                 </div>
 
-                <div className="rounded-xl bg-[#EFF6FF] p-4 sm:p-5">
+                <div className="rounded-xl bg-[#EFF6FF] p-3.5 sm:p-4 lg:p-5">
                   <p className="text-base font-bold text-[#1E3A8A]">Open Slots Now</p>
-                  <p className="mt-1 text-lg font-bold text-[#102E7A]">
+                  <p className="mt-1 text-base font-bold text-[#102E7A] lg:text-lg">
                     {openSlotsCount} of {activeSlots.length}{" "}
                     {viewScope === "region" ? "regional" : "provincial"}
                   </p>
                 </div>
 
-                <div className="rounded-xl bg-[#F4F4F5] p-4 sm:p-5">
+                <div className="rounded-xl bg-[#F4F4F5] p-3.5 sm:p-4 lg:p-5">
                   <p className="text-base font-bold text-[#52525B]">Active Automation</p>
-                  <p className="mt-1 text-lg font-bold text-[#0A0A0A]">
+                  <p className="mt-1 text-base font-bold text-[#0A0A0A] lg:text-lg">
                     {watchRules.length} Alert{watchRules.length === 1 ? "" : "s"} •{" "}
                     {armedProfilesCount} Armed
                   </p>

@@ -47,14 +47,14 @@ export default function ModalDialog({
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-[#0A0A0A]/60 p-4 sm:p-6"
+      className="fixed inset-0 z-[60] flex items-end justify-center bg-[#0A0A0A]/60 p-0 sm:items-center sm:p-6"
     >
       <div
-        className={`flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl bg-white ${maxWidthClass}`}
+        className={`flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl bg-white pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:max-h-[90vh] sm:rounded-2xl sm:pb-0 ${maxWidthClass}`}
       >
-        <div className="flex items-start justify-between gap-4 bg-[#F4F4F5] px-6 py-5 sm:px-8">
-          <div className="min-w-0 flex-1">
-            <h2 id={titleId} className="text-2xl font-bold text-[#0A0A0A]">
+        <div className="flex items-start justify-between gap-4 bg-[#F4F4F5] px-5 py-4 sm:px-8 sm:py-5">
+          <div className="min-w-0 flex-1 pr-2">
+            <h2 id={titleId} className="text-xl font-bold text-[#0A0A0A] sm:text-2xl">
               {title}
             </h2>
             {subtitle && (
@@ -70,7 +70,7 @@ export default function ModalDialog({
           </button>
         </div>
 
-        <div className="overflow-y-auto p-6 sm:p-8">{children}</div>
+        <div className="overscroll-contain overflow-y-auto p-5 sm:p-8">{children}</div>
       </div>
     </div>
   );

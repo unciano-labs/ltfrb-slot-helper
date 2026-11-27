@@ -1,10 +1,22 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "LTFRB Slot Helper",
   description:
     "Check open LTFRB franchise slots, get email alerts every 3 minutes, and manage your LTFRB account.",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "LTFRB Helper",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#FFFFFF",
 };
 
 export default function RootLayout({
