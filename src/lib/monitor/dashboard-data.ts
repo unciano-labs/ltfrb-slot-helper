@@ -249,7 +249,7 @@ export async function loadDashboardData(options?: {
         .select("*")
         .eq("website_id", websiteId)
         .order("occurred_at", { ascending: false })
-        .limit(300),
+        .limit(1000),
     ]);
 
     billingResult = billingState;

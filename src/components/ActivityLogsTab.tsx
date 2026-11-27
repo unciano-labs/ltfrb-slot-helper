@@ -1,16 +1,21 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { ApplicationProfile, SubmissionLogRow } from "@/lib/ltfrb/types";
+import type { ApplicationProfile, SubmissionLogRow, WatchRule } from "@/lib/ltfrb/types";
 import type { CronRunSummary, NotificationLogSummary } from "@/lib/monitor/dashboard-data";
 import type { PaymentRequestRow } from "@/lib/monitor/monetization";
-import { analyzeSlotTiming, type SlotMovementEvent } from "@/lib/monitor/slot-analytics";
+import {
+  analyzeSlotTiming,
+  filterEventsForUserSelection,
+  type SlotMovementEvent,
+} from "@/lib/monitor/slot-analytics";
 import { formatSubmissionTriggerDisplay } from "@/lib/monitor/submission-trigger";
 
 interface ActivityLogsTabProps {
   recentRuns: CronRunSummary[];
   slotEvents: SlotMovementEvent[];
   monitoredFranchiseCodes: string[];
+  watchRules: WatchRule[];
   submissionLogs: SubmissionLogRow[];
   recentNotifications: NotificationLogSummary[];
   paymentRequests: PaymentRequestRow[];
@@ -35,16 +40,19 @@ export default function ActivityLogsTab({
   recentRuns,
   slotEvents,
   monitoredFranchiseCodes,
+  watchRules,
   submissionLogs,
   recentNotifications,
   paymentRequests,
   reservationProfiles,
   onRefresh,
 }: ActivityLogsTabProps) {
+  const hasUserFilter =
+    watchRules.some((r) => r.is_active) ||
+    reservationProfiles.length > 0 ||
+    monitoredFranchiseCodes.length > 0;
   const [category, setCategory] = useState<LogCategory>("all");
-  const [onlyMyFranchises, setOnlyMyFranchises] = useState(
-    monitoredFranchiseCodes.length > 0
-  );
+  const [onlyMyFranchises, setOnlyMyFranchises] = useState(hasUserFilter);
   const [refreshing, setRefreshing] = useState(false);
 
   const profileNameById = new Map<string, string>();
@@ -52,21 +60,23 @@ export default function ActivityLogsTab({
     profileNameById.set(p.id, p.profile_name);
   }
 
-  const activeFilterCodes =
-    onlyMyFranchises && monitoredFranchiseCodes.length > 0
-      ? monitoredFranchiseCodes
-      : undefined;
-
-  const filteredEvents = useMemo(() => {
-    if (!activeFilterCodes) return slotEvents;
-    const set = new Set(activeFilterCodes);
-    return slotEvents.filter((e) => set.has(e.franchise_type_code));
-  }, [activeFilterCodes, slotEvents]);
-
-  const analysis = useMemo(
-    () => analyzeSlotTiming(slotEvents, activeFilterCodes),
-    [activeFilterCodes, slotEvents]
+  const userSelection = useMemo(
+    () =>
+      filterEventsForUserSelection({
+        events: slotEvents,
+        watchRules,
+        reservationProfiles,
+        monitoredFranchiseCodes,
+      }),
+    [monitoredFranchiseCodes, reservationProfiles, slotEvents, watchRules]
   );
+
+  const filteredEvents = useMemo(
+    () => (onlyMyFranchises && hasUserFilter ? userSelection.events : slotEvents),
+    [hasUserFilter, onlyMyFranchises, slotEvents, userSelection.events]
+  );
+
+  const analysis = useMemo(() => analyzeSlotTiming(filteredEvents), [filteredEvents]);
 
   const maxHourCount = useMemo(
     () => Math.max(1, ...analysis.activeHours.map((h) => h.openings + h.decreases)),
@@ -141,12 +151,13 @@ export default function ActivityLogsTab({
                 When Do Slots Open? (Best Time Analysis)
               </h3>
               <p className="mt-1 text-base text-[#52525B]">
-                Tracks exact timestamps (Manila Time) whenever LTFRB slots refill from 0, increase,
-                or decrease.
+                {onlyMyFranchises && userSelection.targetLabels.length > 0
+                  ? `Tracking your chosen slot(s): ${userSelection.targetLabels.join(" • ")}`
+                  : "Tracks exact timestamps (Manila Time) whenever LTFRB slots refill from 0, increase, or decrease."}
               </p>
             </div>
 
-            {monitoredFranchiseCodes.length > 0 && (
+            {hasUserFilter && (
               <button
                 type="button"
                 onClick={() => setOnlyMyFranchises((prev) => !prev)}
@@ -157,8 +168,8 @@ export default function ActivityLogsTab({
                 }`}
               >
                 {onlyMyFranchises
-                  ? `Showing: ${monitoredFranchiseCodes.join(", ")} (Tap for All)`
-                  : "Showing All Franchises (Tap for Mine)"}
+                  ? "Showing Only My Chosen Slots (Tap for All)"
+                  : "Showing All LTFRB Franchises (Tap for Mine)"}
               </button>
             )}
           </div>

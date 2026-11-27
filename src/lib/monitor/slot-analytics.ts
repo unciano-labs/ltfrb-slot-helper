@@ -1,4 +1,4 @@
-import type { SlotEntry, SlotScope } from "@/lib/ltfrb/types";
+import type { ApplicationProfile, SlotEntry, SlotScope, WatchRule } from "@/lib/ltfrb/types";
 
 export type SlotMovementType = "refilled" | "increased" | "decreased";
 
@@ -390,5 +390,143 @@ export function analyzeSlotTiming(
     activeHours,
     avgMinutesToFill,
     recommendation,
+  };
+}
+
+function isNcrName(name: string | null | undefined): boolean {
+  if (!name) return false;
+  const upper = name.toUpperCase();
+  return upper.includes("NCR") || upper.includes("NATIONAL CAPITAL REGION") || upper.includes("MUCEP");
+}
+
+function eventMatchesWatchRule(
+  ev: SlotMovementEvent,
+  rule: Pick<
+    WatchRule,
+    | "is_active"
+    | "scope"
+    | "franchise_type_code"
+    | "region_code"
+    | "region_name"
+    | "province_code"
+    | "province_name"
+  >
+): boolean {
+  if (!rule.is_active) return false;
+  if (ev.scope !== rule.scope) return false;
+  if (
+    rule.franchise_type_code !== "ALL" &&
+    ev.franchise_type_code !== rule.franchise_type_code
+  ) {
+    return false;
+  }
+  if (rule.region_code && ev.region_code !== rule.region_code) {
+    return false;
+  }
+  if (
+    rule.scope === "province" &&
+    rule.province_code &&
+    ev.province_code !== rule.province_code
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function eventMatchesProfile(
+  ev: SlotMovementEvent,
+  profile: Pick<
+    ApplicationProfile,
+    "franchise_type_code" | "region_name" | "province_name"
+  >
+): boolean {
+  if (ev.franchise_type_code !== profile.franchise_type_code) {
+    return false;
+  }
+  if (profile.province_name) {
+    if (ev.scope === "province" && ev.province_name === profile.province_name) {
+      if (isNcrName(profile.region_name) && ev.region_code) {
+        return ev.region_code === "1300000000";
+      }
+      return (
+        ev.region_name === profile.region_name ||
+        profile.province_name === "MUCEP AREA"
+      );
+    }
+    return false;
+  }
+  return ev.scope === "region" && ev.region_name === profile.region_name;
+}
+
+/**
+ * Filters slot movement events strictly to the user's chosen watch rules and/or
+ * reservation profiles (including exact region/MUCEP/province), falling back to
+ * `monitoredFranchiseCodes` when no rules/profiles exist yet.
+ * Deduplicates mirrored region+province records that happen at the exact same tick.
+ */
+export function filterEventsForUserSelection(params: {
+  events: SlotMovementEvent[];
+  watchRules: Array<
+    Pick<
+      WatchRule,
+      | "is_active"
+      | "scope"
+      | "franchise_type_code"
+      | "region_code"
+      | "region_name"
+      | "province_code"
+      | "province_name"
+    >
+  >;
+  reservationProfiles: Array<
+    Pick<ApplicationProfile, "franchise_type_code" | "region_name" | "province_name">
+  >;
+  monitoredFranchiseCodes: string[];
+}): { events: SlotMovementEvent[]; targetLabels: string[] } {
+  const { events, watchRules, reservationProfiles, monitoredFranchiseCodes } = params;
+  const activeRules = watchRules.filter((r) => r.is_active);
+  const hasSpecificTargets = activeRules.length > 0 || reservationProfiles.length > 0;
+
+  const labelSet = new Set<string>();
+  for (const rule of activeRules) {
+    const area =
+      rule.scope === "province"
+        ? rule.province_name ?? rule.region_name ?? "Selected Province"
+        : rule.region_name ?? "All Regions";
+    labelSet.add(`${rule.franchise_type_code} (${area})`);
+  }
+  for (const prof of reservationProfiles) {
+    const area = prof.province_name || prof.region_name;
+    labelSet.add(`${prof.franchise_type_code} (${area})`);
+  }
+
+  let matched: SlotMovementEvent[];
+  if (hasSpecificTargets) {
+    matched = events.filter(
+      (ev) =>
+        activeRules.some((rule) => eventMatchesWatchRule(ev, rule)) ||
+        reservationProfiles.some((prof) => eventMatchesProfile(ev, prof))
+    );
+  } else if (monitoredFranchiseCodes.length > 0) {
+    const allowedSet = new Set(monitoredFranchiseCodes);
+    matched = events.filter((ev) => allowedSet.has(ev.franchise_type_code));
+    for (const code of monitoredFranchiseCodes) labelSet.add(code);
+  } else {
+    matched = events;
+  }
+
+  // Deduplicate mirrored region + province events on the exact same tick/franchise/delta
+  const seenMirror = new Set<string>();
+  const deduped: SlotMovementEvent[] = [];
+  for (const ev of matched) {
+    const dedupKey = `${ev.occurred_at}|${ev.franchise_type_code}|${ev.region_code ?? ""}|${ev.event_type}|${ev.previous_remaining}|${ev.new_remaining}`;
+    if (seenMirror.has(dedupKey)) continue;
+    seenMirror.add(dedupKey);
+    deduped.push(ev);
+  }
+
+  return {
+    events: deduped,
+    targetLabels: Array.from(labelSet),
   };
 }

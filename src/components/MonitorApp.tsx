@@ -1604,6 +1604,7 @@ export default function MonitorApp({ initialData }: MonitorAppProps) {
               recentRuns={recentRuns}
               slotEvents={slotEvents}
               monitoredFranchiseCodes={monitoredFranchiseCodes}
+              watchRules={watchRules}
               submissionLogs={submissionLogs}
               recentNotifications={recentNotifications}
               paymentRequests={paymentRequests}
