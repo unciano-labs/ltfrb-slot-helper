@@ -192,6 +192,11 @@ function getMatchingSlotsForProfile(
   );
 }
 
+function getManilaHourBucket(ms: number): number {
+  // Asia/Manila is permanently UTC+8 (no DST), so integer division gives the exact Manila hour bucket.
+  return Math.floor((ms + 8 * 60 * 60_000) / (60 * 60_000));
+}
+
 function formatManilaHourWindow(hour: number): string {
   if (hour === 0) return "12:00 MN";
   const period = hour >= 12 ? "PM" : "AM";
@@ -239,9 +244,10 @@ export function shouldAutoSubmitProfile(params: {
     const inScheduledWindow =
       (hour === 0 || hour === 7 || hour === 8) && minute < 30;
     if (inScheduledWindow) {
-      const recentlyAttempted =
-        !Number.isNaN(lastMs) && now.getTime() - lastMs < 25 * 60_000;
-      if (!recentlyAttempted) {
+      const alreadyAttemptedThisHour =
+        !Number.isNaN(lastMs) &&
+        getManilaHourBucket(lastMs) === getManilaHourBucket(now.getTime());
+      if (!alreadyAttemptedThisHour) {
         return {
           shouldSubmit: true,
           reason: "scheduled_hours",

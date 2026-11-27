@@ -399,6 +399,28 @@ describe("LTFRB normalizers and watch rules", () => {
       false
     );
 
+    // Must NOT double-trigger at 12:27 AM if 12:00 AM already ran (3-min cron inside < 30 window)
+    assert.equal(
+      shouldAutoSubmitProfile({
+        profile: {
+          is_armed: true,
+          lock_status: "idle",
+          franchise_type_code: "E_TNVS",
+          region_name: "National Capital Region (NCR)",
+          province_name: null,
+          number_of_units: 1,
+          submit_on_slot_increase: false,
+          submit_at_midnight: true,
+          submit_hourly: false,
+          last_attempted_at: "2026-11-27T16:00:10Z", // 12:00:10 AM PHT
+        },
+        allSlots: [],
+        prevRemainingMap: new Map(),
+        now: new Date("2026-11-27T16:27:05Z"), // 12:27:05 AM PHT
+      }).shouldSubmit,
+      false
+    );
+
     // Hourly does NOT trigger when slot is 0 (full)
     const slotZero = { ...slotOpen, remaining: 0 };
     assert.equal(
