@@ -119,25 +119,25 @@ function PaginationBar({
   const canGoNext = page < totalPages || hasMoreOnServer;
 
   return (
-    <div className="mt-5 flex flex-col gap-3 rounded-xl bg-[#F4F4F5] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mt-3 flex flex-col gap-2 rounded-xl bg-[#F4F4F5] px-3.5 py-2 sm:flex-row sm:items-center sm:justify-between">
       <p className="text-base font-bold text-[#3F3F46]">
-        Showing {startIdx}–{endIdx} of {totalItems}
-        {hasMoreOnServer ? "+" : ""} • Page {page} of {totalPages}
+        {startIdx}–{endIdx} of {totalItems}
+        {hasMoreOnServer ? "+" : ""} (Page {page}/{totalPages})
       </p>
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
           disabled={page <= 1 || loadingMore}
           onClick={onPrev}
-          className="min-h-12 rounded-xl bg-white px-5 py-2.5 text-base font-bold text-[#0A0A0A] hover:bg-[#E4E4E7] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-50"
+          className="min-h-12 rounded-xl bg-white px-4 py-2 text-base font-bold text-[#0A0A0A] hover:bg-[#E4E4E7] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-50"
         >
-          Previous
+          Prev
         </button>
         <button
           type="button"
           disabled={!canGoNext || loadingMore}
           onClick={onNext}
-          className="min-h-12 rounded-xl bg-[#1447E6] px-5 py-2.5 text-base font-bold text-white hover:bg-[#1039B8] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-50"
+          className="min-h-12 rounded-xl bg-[#1447E6] px-4 py-2 text-base font-bold text-white hover:bg-[#1039B8] focus:outline-none focus:ring-4 focus:ring-blue-700/30 disabled:opacity-50"
         >
           {loadingMore
             ? "Loading Older..."
@@ -583,33 +583,33 @@ export default function ActivityLogsTab({
               Timestamped Slot Refills, Increases &amp; Decreases
             </h4>
             {filteredEvents.length === 0 ? (
-              <p className="mt-3 text-lg text-[#52525B]">
+              <p className="mt-2 text-base text-[#52525B]">
                 No slot count changes observed yet for this filter. Keep Automatic Check running
                 every 3 minutes to log exact movement timestamps.
               </p>
             ) : (
               <>
-                <div className="mt-4 space-y-3">
+                <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                   {pagedMovements.map((ev) => {
                     const badge = movementBadge(ev);
                     return (
                       <div
                         key={ev.id}
-                        className="flex flex-col gap-3 rounded-xl bg-[#F4F4F5] p-4 sm:flex-row sm:items-center sm:justify-between"
+                        className="flex items-center justify-between gap-2 rounded-lg bg-[#F4F4F5] px-3.5 py-2"
                       >
-                        <div>
-                          <p className="text-lg font-bold text-[#0A0A0A]">
-                            {ev.franchise_type_name} — {badge.areaLabel}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-base font-bold text-[#0A0A0A]">
+                            {ev.franchise_type_code} — {badge.areaLabel}
                           </p>
-                          <p className="mt-1 text-base text-[#52525B]">
-                            {formatManilaTime(ev.occurred_at)} • Slots changed:{" "}
+                          <p className="text-base text-[#52525B]">
+                            {formatManilaTime(ev.occurred_at)} ·{" "}
                             <strong>
                               {ev.previous_remaining} → {ev.new_remaining}
                             </strong>
                           </p>
                         </div>
                         <span
-                          className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold ${badge.style}`}
+                          className={`inline-block shrink-0 rounded-lg px-2.5 py-1 text-base font-bold ${badge.style}`}
                         >
                           {badge.text}
                         </span>
@@ -639,15 +639,15 @@ export default function ActivityLogsTab({
 
       {/* 1. Auto-Reserve Submission Logs */}
       {(category === "all" || category === "submissions") && (
-        <div className="rounded-2xl bg-white p-6 sm:p-8">
-          <h3 className="text-2xl font-bold text-[#0A0A0A]">Auto-Reserve Submission History</h3>
+        <div className="rounded-2xl bg-white p-5 sm:p-6">
+          <h3 className="text-xl font-bold text-[#0A0A0A]">Auto-Reserve Submission History</h3>
           {allSubmissions.length === 0 ? (
-            <p className="mt-3 text-lg text-[#52525B]">
+            <p className="mt-2 text-base text-[#52525B]">
               No reservation attempts recorded for your account yet.
             </p>
           ) : (
             <>
-              <div className="mt-5 space-y-3">
+              <div className="mt-3 space-y-2">
                 {pagedSubmissions.map((log) => {
                   const profileLabel =
                     profileNameById.get(log.application_profile_id) ?? "Saved Application";
@@ -659,47 +659,47 @@ export default function ActivityLogsTab({
                       : "bg-[#FEE2E2] text-[#7F1D1D]";
                   const badgeLabel =
                     log.result === "success"
-                      ? "Submitted Successfully"
+                      ? "Submitted"
                       : log.result === "full_slot"
-                      ? "Slot Was Full"
+                      ? "Slot Full"
                       : log.result === "auth_error"
-                      ? "LTFRB Login Error"
+                      ? "Login Error"
                       : "Needs Attention";
                   const triggerDisplay = formatSubmissionTriggerDisplay(log);
 
                   return (
-                    <div key={log.id} className="rounded-xl bg-[#F4F4F5] p-5">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-xl font-bold text-[#0A0A0A]">
-                            {profileLabel}
-                            {log.reference_number ? ` • Case #${log.reference_number}` : ""}
-                          </p>
-                          <p className="mt-1 text-base text-[#52525B]">
+                    <div key={log.id} className="rounded-lg bg-[#F4F4F5] px-3.5 py-2.5">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-base font-bold text-[#0A0A0A]">
+                          {profileLabel}
+                          {log.reference_number ? ` · Case #${log.reference_number}` : ""} ·{" "}
+                          <span className="font-normal text-[#52525B]">
                             {formatManilaTime(log.attempted_at)}
-                            {log.http_status ? ` • LTFRB HTTP ${log.http_status}` : ""}
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
+                            {log.http_status ? ` · HTTP ${log.http_status}` : ""}
+                          </span>
+                        </p>
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <span
-                            className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold ${triggerDisplay.badgeStyle}`}
+                            className={`inline-block shrink-0 rounded-lg px-2.5 py-1 text-base font-bold ${triggerDisplay.badgeStyle}`}
                           >
                             {triggerDisplay.badgeLabel}
                           </span>
                           <span
-                            className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold ${badgeStyle}`}
+                            className={`inline-block shrink-0 rounded-lg px-2.5 py-1 text-base font-bold ${badgeStyle}`}
                           >
                             {badgeLabel}
                           </span>
                         </div>
                       </div>
                       {triggerDisplay.detailText && (
-                        <p className="mt-2 rounded-lg bg-white px-3.5 py-2 text-base font-bold text-[#18181B]">
+                        <p className="mt-1 rounded-md bg-white px-2.5 py-1 text-base font-bold text-[#18181B]">
                           Trigger: {triggerDisplay.detailText}
                         </p>
                       )}
                       {log.message && (
-                        <p className="mt-2 text-lg leading-relaxed text-[#3F3F46]">{log.message}</p>
+                        <p className="mt-1 line-clamp-2 text-base leading-snug text-[#3F3F46]">
+                          {log.message}
+                        </p>
                       )}
                     </div>
                   );
@@ -721,35 +721,36 @@ export default function ActivityLogsTab({
 
       {/* 2. Email Notification Logs */}
       {(category === "all" || category === "emails") && (
-        <div className="rounded-2xl bg-white p-6 sm:p-8">
-          <h3 className="text-2xl font-bold text-[#0A0A0A]">Email Alert History</h3>
+        <div className="rounded-2xl bg-white p-5 sm:p-6">
+          <h3 className="text-xl font-bold text-[#0A0A0A]">Email Alert History</h3>
           {allNotifications.length === 0 ? (
-            <p className="mt-3 text-lg text-[#52525B]">No alert emails sent to you yet.</p>
+            <p className="mt-2 text-base text-[#52525B]">No alert emails sent to you yet.</p>
           ) : (
             <>
-              <div className="mt-5 space-y-3">
+              <div className="mt-3 space-y-2">
                 {pagedNotifications.map((log) => (
-                  <div key={log.id} className="rounded-xl bg-[#F4F4F5] p-5">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-xl font-bold text-[#0A0A0A]">{log.subject}</p>
-                        <p className="mt-1 text-base text-[#52525B]">
-                          Sent to <strong>{log.recipient}</strong> • {log.remaining_at_alert} open
-                          slot(s) • {formatManilaTime(log.sent_at)}
-                        </p>
-                      </div>
-                      <span
-                        className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold uppercase ${
-                          log.status === "sent"
-                            ? "bg-[#DCFCE7] text-[#14532D]"
-                            : log.status === "failed"
-                            ? "bg-[#FEE2E2] text-[#7F1D1D]"
-                            : "bg-[#E4E4E7] text-[#3F3F46]"
-                        }`}
-                      >
-                        {log.status}
-                      </span>
+                  <div
+                    key={log.id}
+                    className="flex flex-col gap-2 rounded-lg bg-[#F4F4F5] px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-base font-bold text-[#0A0A0A]">{log.subject}</p>
+                      <p className="text-base text-[#52525B]">
+                        {log.recipient} · {log.remaining_at_alert} open ·{" "}
+                        {formatManilaTime(log.sent_at)}
+                      </p>
                     </div>
+                    <span
+                      className={`inline-block shrink-0 rounded-lg px-2.5 py-1 text-base font-bold uppercase ${
+                        log.status === "sent"
+                          ? "bg-[#DCFCE7] text-[#14532D]"
+                          : log.status === "failed"
+                          ? "bg-[#FEE2E2] text-[#7F1D1D]"
+                          : "bg-[#E4E4E7] text-[#3F3F46]"
+                      }`}
+                    >
+                      {log.status}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -769,30 +770,29 @@ export default function ActivityLogsTab({
 
       {/* 3. Automatic Slot Checks */}
       {(category === "all" || category === "checks") && (
-        <div className="rounded-2xl bg-white p-6 sm:p-8">
-          <h3 className="text-2xl font-bold text-[#0A0A0A]">Automatic Slot Check History</h3>
+        <div className="rounded-2xl bg-white p-5 sm:p-6">
+          <h3 className="text-xl font-bold text-[#0A0A0A]">Automatic Slot Check History</h3>
           {allRuns.length === 0 ? (
-            <p className="mt-3 text-lg text-[#52525B]">No slot check runs recorded yet.</p>
+            <p className="mt-2 text-base text-[#52525B]">No slot check runs recorded yet.</p>
           ) : (
             <>
-              <div className="mt-5 space-y-3">
+              <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
                 {pagedRuns.map((run) => (
-                  <div key={run.id} className="rounded-xl bg-[#F4F4F5] p-5">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="text-xl font-bold text-[#0A0A0A]">
-                          {run.trigger_source === "manual"
-                            ? "Manual Slot Check"
-                            : "Automatic Check (Every 3 Minutes)"}
+                  <div key={run.id} className="rounded-lg bg-[#F4F4F5] px-3.5 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-base font-bold text-[#0A0A0A]">
+                          {run.trigger_source === "manual" ? "Manual Check" : "Auto Check (3m)"} ·{" "}
+                          <span className="font-normal text-[#52525B]">
+                            {formatManilaTime(run.finished_at ?? run.started_at)}
+                          </span>
                         </p>
-                        <p className="mt-1 text-base text-[#52525B]">
-                          {formatManilaTime(run.finished_at ?? run.started_at)} •{" "}
-                          {run.records_checked} slot entries checked • {run.alerts_sent} alert(s)
-                          sent
+                        <p className="text-base text-[#52525B]">
+                          {run.records_checked} entries · {run.alerts_sent} alert(s)
                         </p>
                       </div>
                       <span
-                        className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold uppercase ${
+                        className={`inline-block shrink-0 rounded-lg px-2.5 py-1 text-base font-bold uppercase ${
                           run.status === "success"
                             ? "bg-[#DCFCE7] text-[#14532D]"
                             : run.status === "error"
@@ -800,11 +800,11 @@ export default function ActivityLogsTab({
                             : "bg-[#DBEAFE] text-[#1E3A8A]"
                         }`}
                       >
-                        {run.status === "success" ? "Completed" : run.status}
+                        {run.status === "success" ? "Done" : run.status}
                       </span>
                     </div>
                     {run.error_message && (
-                      <p className="mt-2 text-base font-bold text-[#7F1D1D]">
+                      <p className="mt-1 text-base font-bold text-[#7F1D1D]">
                         {run.error_message}
                       </p>
                     )}
@@ -827,15 +827,15 @@ export default function ActivityLogsTab({
 
       {/* 4. Payment & Plan Logs */}
       {(category === "all" || category === "payments") && (
-        <div className="rounded-2xl bg-white p-6 sm:p-8">
-          <h3 className="text-2xl font-bold text-[#0A0A0A]">Plan &amp; Payment History</h3>
+        <div className="rounded-2xl bg-white p-5 sm:p-6">
+          <h3 className="text-xl font-bold text-[#0A0A0A]">Plan &amp; Payment History</h3>
           {paymentRequests.length === 0 ? (
-            <p className="mt-3 text-lg text-[#52525B]">
+            <p className="mt-2 text-base text-[#52525B]">
               No GCash or Maya payment requests submitted yet.
             </p>
           ) : (
             <>
-              <div className="mt-5 space-y-3">
+              <div className="mt-3 space-y-2">
                 {pagedPayments.map((req) => {
                   const items: string[] = [];
                   if (req.includes_annual_plan) items.push("1-Year Plan");
@@ -846,20 +846,20 @@ export default function ActivityLogsTab({
                     items.push(`+${req.requested_extra_alerts} Alert Slot(s)`);
                   }
                   return (
-                    <div key={req.id} className="rounded-xl bg-[#F4F4F5] p-5">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div key={req.id} className="rounded-lg bg-[#F4F4F5] px-3.5 py-2.5">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                         <div>
-                          <p className="text-xl font-bold text-[#0A0A0A]">
+                          <p className="text-base font-bold text-[#0A0A0A]">
                             ₱{req.expected_amount_php.toLocaleString("en-PH")} —{" "}
                             {items.join(" + ")}
                           </p>
-                          <p className="mt-1 text-base text-[#52525B]">
-                            Ref: <strong>{req.reference_number}</strong> • Submitted{" "}
+                          <p className="text-base text-[#52525B]">
+                            Ref: <strong>{req.reference_number}</strong> ·{" "}
                             {formatManilaTime(req.created_at)}
                           </p>
                         </div>
                         <span
-                          className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold uppercase ${
+                          className={`inline-block shrink-0 rounded-lg px-2.5 py-1 text-base font-bold uppercase ${
                             req.status === "approved"
                               ? "bg-[#DCFCE7] text-[#14532D]"
                               : req.status === "rejected"
@@ -871,7 +871,7 @@ export default function ActivityLogsTab({
                         </span>
                       </div>
                       {req.rejection_reason && (
-                        <p className="mt-2 rounded-lg bg-[#FEE2E2] px-3 py-2 text-base font-bold text-[#7F1D1D]">
+                        <p className="mt-1 rounded-md bg-[#FEE2E2] px-2.5 py-1 text-base font-bold text-[#7F1D1D]">
                           Note: {req.rejection_reason}
                         </p>
                       )}
@@ -909,10 +909,10 @@ export default function ActivityLogsTab({
         onClose={closeHourModal}
       >
         {selectedHourEvents.length === 0 ? (
-          <p className="text-lg text-[#52525B]">No detailed events recorded for this hour.</p>
+          <p className="text-base text-[#52525B]">No detailed events recorded for this hour.</p>
         ) : (
           <>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {selectedHourEvents
                 .slice((hourModalPage - 1) * PAGE_SIZE, hourModalPage * PAGE_SIZE)
                 .map((ev) => {
@@ -920,21 +920,21 @@ export default function ActivityLogsTab({
                   return (
                     <div
                       key={ev.id}
-                      className="flex flex-col gap-3 rounded-xl bg-[#F4F4F5] p-4 sm:flex-row sm:items-center sm:justify-between"
+                      className="flex flex-col gap-2 rounded-lg bg-[#F4F4F5] px-3.5 py-2 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      <div>
-                        <p className="text-lg font-bold text-[#0A0A0A]">
-                          {ev.franchise_type_name} — {badge.areaLabel}
+                      <div className="min-w-0 flex-1">
+                        <p className="text-base font-bold text-[#0A0A0A]">
+                          {ev.franchise_type_code} — {badge.areaLabel}
                         </p>
-                        <p className="mt-1 text-base text-[#52525B]">
-                          {formatManilaTime(ev.occurred_at)} • Slots changed:{" "}
+                        <p className="text-base text-[#52525B]">
+                          {formatManilaTime(ev.occurred_at)} ·{" "}
                           <strong>
                             {ev.previous_remaining} → {ev.new_remaining}
                           </strong>
                         </p>
                       </div>
                       <span
-                        className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold ${badge.style}`}
+                        className={`inline-block shrink-0 rounded-lg px-2.5 py-1 text-base font-bold ${badge.style}`}
                       >
                         {badge.text}
                       </span>

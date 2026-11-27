@@ -1783,38 +1783,42 @@ export default function AutoReserveTab({
       </ModalDialog>
 
       {/* Submission History */}
-      <div className="rounded-2xl bg-white p-6 sm:p-8">
-        <h3 className="text-2xl font-bold text-[#17191C]">Recent Reservation Attempts</h3>
+      <div className="rounded-2xl bg-white p-5 sm:p-6">
+        <h3 className="text-xl font-bold text-[#17191C]">Recent Reservation Attempts</h3>
         {submissionLogs.length === 0 ? (
-          <p className="mt-3 text-lg text-[#4B5563]">No reservation attempts recorded yet.</p>
+          <p className="mt-2 text-base text-[#4B5563]">No reservation attempts recorded yet.</p>
         ) : (
-          <div className="mt-5 space-y-3">
+          <div className="mt-3 space-y-2">
             {submissionLogs.map((log) => {
               const triggerDisplay = formatSubmissionTriggerDisplay(log);
               return (
-                <div key={log.id} className="rounded-xl bg-[#EEF1F4] p-4">
+                <div key={log.id} className="rounded-lg bg-[#EEF1F4] px-3.5 py-2.5">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-lg font-bold text-[#17191C]">
+                    <p className="text-base font-bold text-[#17191C]">
                       {log.result === "success"
                         ? "Submitted Successfully"
                         : log.result === "full_slot"
                         ? "Slot Was Full"
                         : "Needs Attention"}
                       {log.reference_number ? ` • Case #${log.reference_number}` : ""}
+                      {" · "}
+                      <span className="font-normal text-[#4B5563]">
+                        {formatManilaTime(log.attempted_at)}
+                      </span>
                     </p>
                     <span
-                      className={`inline-block shrink-0 rounded-xl px-3.5 py-1.5 text-base font-bold ${triggerDisplay.badgeStyle}`}
+                      className={`inline-block shrink-0 rounded-lg px-2.5 py-1 text-base font-bold ${triggerDisplay.badgeStyle}`}
                     >
                       {triggerDisplay.badgeLabel}
                     </span>
                   </div>
                   {triggerDisplay.detailText && (
-                    <p className="mt-2 rounded-lg bg-white px-3 py-2 text-base font-bold text-[#17191C]">
+                    <p className="mt-1 rounded-md bg-white px-2.5 py-1 text-base font-bold text-[#17191C]">
                       Trigger: {triggerDisplay.detailText}
                     </p>
                   )}
-                  <p className="mt-1 text-base text-[#374151]">
-                    {log.message} • {formatManilaTime(log.attempted_at)}
+                  <p className="mt-1 line-clamp-2 text-base leading-snug text-[#374151]">
+                    {log.message}
                   </p>
                 </div>
               );
