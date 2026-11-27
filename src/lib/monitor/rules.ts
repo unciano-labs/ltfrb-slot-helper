@@ -1,4 +1,5 @@
 import type { ApplicationProfile, SlotEntry, WatchRule } from "@/lib/ltfrb/types";
+import { formatManilaShortTimestamp } from "@/lib/monitor/submission-trigger";
 
 /**
  * Matches whether a slot entry belongs to a watch rule's target scope,
@@ -191,6 +192,13 @@ function getMatchingSlotsForProfile(
   );
 }
 
+function formatManilaHourWindow(hour: number): string {
+  if (hour === 0) return "12:00 MN";
+  const period = hour >= 12 ? "PM" : "AM";
+  const h12 = hour > 12 ? hour - 12 : hour;
+  return `${h12}:00 ${period}`;
+}
+
 export function shouldAutoSubmitProfile(params: {
   profile: Pick<
     ApplicationProfile,
@@ -208,18 +216,23 @@ export function shouldAutoSubmitProfile(params: {
   allSlots: SlotEntry[];
   prevRemainingMap: Map<string, number>;
   now?: Date;
-}): { shouldSubmit: boolean; reason: "slot_increased" | "scheduled_hours" | "hourly" | "none" } {
+}): {
+  shouldSubmit: boolean;
+  reason: "slot_increased" | "scheduled_hours" | "hourly" | "none";
+  triggerDetail: string | null;
+} {
   const { profile, allSlots, prevRemainingMap } = params;
   const now = params.now ?? new Date();
 
   if (!profile.is_armed || profile.lock_status !== "idle") {
-    return { shouldSubmit: false, reason: "none" };
+    return { shouldSubmit: false, reason: "none", triggerDetail: null };
   }
 
   const submitOnIncrease = profile.submit_on_slot_increase ?? true;
   const submitAtScheduledHours = profile.submit_at_midnight ?? false;
   const submitHourly = profile.submit_hourly ?? false;
   const lastMs = profile.last_attempted_at ? Date.parse(profile.last_attempted_at) : NaN;
+  const checkedTimeLabel = formatManilaShortTimestamp(now);
 
   if (submitAtScheduledHours) {
     const { hour, minute } = getManilaHourMinute(now);
@@ -229,28 +242,36 @@ export function shouldAutoSubmitProfile(params: {
       const recentlyAttempted =
         !Number.isNaN(lastMs) && now.getTime() - lastMs < 25 * 60_000;
       if (!recentlyAttempted) {
-        return { shouldSubmit: true, reason: "scheduled_hours" };
+        return {
+          shouldSubmit: true,
+          reason: "scheduled_hours",
+          triggerDetail: `Triggered by scheduled TIME (${formatManilaHourWindow(hour)} Manila) at ${checkedTimeLabel}`,
+        };
       }
     }
   }
 
   if (submitHourly) {
     const matchingSlots = getMatchingSlotsForProfile(profile, allSlots);
-    const hasOpenSlot = matchingSlots.some(
+    const openSlot = matchingSlots.find(
       (slot) => slot.remaining >= profile.number_of_units
     );
 
     const hourElapsed =
       Number.isNaN(lastMs) || now.getTime() - lastMs >= 55 * 60_000;
-    if (hasOpenSlot && hourElapsed) {
-      return { shouldSubmit: true, reason: "hourly" };
+    if (openSlot && hourElapsed) {
+      return {
+        shouldSubmit: true,
+        reason: "hourly",
+        triggerDetail: `Triggered by hourly TIME (${openSlot.remaining} open slot(s)) at ${checkedTimeLabel}`,
+      };
     }
   }
 
   if (submitOnIncrease) {
     const matchingSlots = getMatchingSlotsForProfile(profile, allSlots);
 
-    const increasedAndEnough = matchingSlots.some((slot) => {
+    const increasedSlot = matchingSlots.find((slot) => {
       if (slot.remaining < profile.number_of_units) return false;
       const prev = prevRemainingMap.has(slot.slotKey)
         ? prevRemainingMap.get(slot.slotKey)!
@@ -258,10 +279,33 @@ export function shouldAutoSubmitProfile(params: {
       return prev === null || prev < profile.number_of_units || slot.remaining > prev;
     });
 
-    if (increasedAndEnough) {
-      return { shouldSubmit: true, reason: "slot_increased" };
+    if (increasedSlot) {
+      const prev = prevRemainingMap.has(increasedSlot.slotKey)
+        ? prevRemainingMap.get(increasedSlot.slotKey)!
+        : null;
+      const areaLabel =
+        increasedSlot.scope === "province" && increasedSlot.provinceName
+          ? increasedSlot.provinceName
+          : increasedSlot.regionName;
+
+      let detail: string;
+      if (prev === null) {
+        detail = `Triggered by open slot (${increasedSlot.remaining} available in ${areaLabel}) on ${checkedTimeLabel}`;
+      } else if (prev === 0) {
+        detail = `Triggered by new open refill (0 → ${increasedSlot.remaining} in ${areaLabel}) on ${checkedTimeLabel}`;
+      } else if (increasedSlot.remaining > prev) {
+        detail = `Triggered by slot increase (${prev} → ${increasedSlot.remaining}, +${increasedSlot.remaining - prev} in ${areaLabel}) on ${checkedTimeLabel}`;
+      } else {
+        detail = `Triggered by slot increase (${prev} → ${increasedSlot.remaining} in ${areaLabel}) on ${checkedTimeLabel}`;
+      }
+
+      return {
+        shouldSubmit: true,
+        reason: "slot_increased",
+        triggerDetail: detail,
+      };
     }
   }
 
-  return { shouldSubmit: false, reason: "none" };
+  return { shouldSubmit: false, reason: "none", triggerDetail: null };
 }

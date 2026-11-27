@@ -330,14 +330,20 @@ export async function runSlotMonitorSync(
         continue;
       }
 
+      const checkedAtDate = new Date(checkedAt);
       const decision = shouldAutoSubmitProfile({
         profile,
         allSlots,
         prevRemainingMap: prevMap,
+        now: checkedAtDate,
       });
 
       if (decision.shouldSubmit) {
-        const outcome = await attemptSlotReservation({ profileId: profile.id });
+        const outcome = await attemptSlotReservation({
+          profileId: profile.id,
+          triggerType: decision.reason === "none" ? undefined : decision.reason,
+          triggerDetail: decision.triggerDetail ?? undefined,
+        });
         reservationsAttempted.push(outcome);
       }
     }

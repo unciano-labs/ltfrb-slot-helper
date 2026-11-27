@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { isPresignedS3UrlExpired } from "@/lib/ltfrb/client";
+import { formatSubmissionTriggerDisplay } from "@/lib/monitor/submission-trigger";
 import type {
   ApplicationProfile,
   FranchiseType,
@@ -1739,21 +1740,36 @@ export default function AutoReserveTab({
           <p className="mt-3 text-lg text-[#4B5563]">No reservation attempts recorded yet.</p>
         ) : (
           <div className="mt-5 space-y-3">
-            {submissionLogs.map((log) => (
-              <div key={log.id} className="rounded-xl bg-[#EEF1F4] p-4">
-                <p className="text-lg font-bold text-[#17191C]">
-                  {log.result === "success"
-                    ? "Submitted Successfully"
-                    : log.result === "full_slot"
-                    ? "Slot Was Full"
-                    : "Needs Attention"}
-                  {log.reference_number ? ` • Case #${log.reference_number}` : ""}
-                </p>
-                <p className="mt-1 text-base text-[#374151]">
-                  {log.message} • {formatManilaTime(log.attempted_at)}
-                </p>
-              </div>
-            ))}
+            {submissionLogs.map((log) => {
+              const triggerDisplay = formatSubmissionTriggerDisplay(log);
+              return (
+                <div key={log.id} className="rounded-xl bg-[#EEF1F4] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-lg font-bold text-[#17191C]">
+                      {log.result === "success"
+                        ? "Submitted Successfully"
+                        : log.result === "full_slot"
+                        ? "Slot Was Full"
+                        : "Needs Attention"}
+                      {log.reference_number ? ` • Case #${log.reference_number}` : ""}
+                    </p>
+                    <span
+                      className={`inline-block shrink-0 rounded-xl px-3.5 py-1.5 text-base font-bold ${triggerDisplay.badgeStyle}`}
+                    >
+                      {triggerDisplay.badgeLabel}
+                    </span>
+                  </div>
+                  {triggerDisplay.detailText && (
+                    <p className="mt-2 rounded-lg bg-white px-3 py-2 text-base font-bold text-[#17191C]">
+                      Trigger: {triggerDisplay.detailText}
+                    </p>
+                  )}
+                  <p className="mt-1 text-base text-[#374151]">
+                    {log.message} • {formatManilaTime(log.attempted_at)}
+                  </p>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

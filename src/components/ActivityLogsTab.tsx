@@ -5,6 +5,7 @@ import type { ApplicationProfile, SubmissionLogRow } from "@/lib/ltfrb/types";
 import type { CronRunSummary, NotificationLogSummary } from "@/lib/monitor/dashboard-data";
 import type { PaymentRequestRow } from "@/lib/monitor/monetization";
 import { analyzeSlotTiming, type SlotMovementEvent } from "@/lib/monitor/slot-analytics";
+import { formatSubmissionTriggerDisplay } from "@/lib/monitor/submission-trigger";
 
 interface ActivityLogsTabProps {
   recentRuns: CronRunSummary[];
@@ -342,6 +343,7 @@ export default function ActivityLogsTab({
                     : log.result === "auth_error"
                     ? "LTFRB Login Error"
                     : "Needs Attention";
+                const triggerDisplay = formatSubmissionTriggerDisplay(log);
 
                 return (
                   <div key={log.id} className="rounded-xl bg-[#F4F4F5] p-5">
@@ -356,12 +358,24 @@ export default function ActivityLogsTab({
                           {log.http_status ? ` • LTFRB HTTP ${log.http_status}` : ""}
                         </p>
                       </div>
-                      <span
-                        className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold ${badgeStyle}`}
-                      >
-                        {badgeLabel}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span
+                          className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold ${triggerDisplay.badgeStyle}`}
+                        >
+                          {triggerDisplay.badgeLabel}
+                        </span>
+                        <span
+                          className={`inline-block shrink-0 rounded-xl px-4 py-2 text-base font-bold ${badgeStyle}`}
+                        >
+                          {badgeLabel}
+                        </span>
+                      </div>
                     </div>
+                    {triggerDisplay.detailText && (
+                      <p className="mt-2 rounded-lg bg-white px-3.5 py-2 text-base font-bold text-[#18181B]">
+                        Trigger: {triggerDisplay.detailText}
+                      </p>
+                    )}
                     {log.message && (
                       <p className="mt-2 text-lg leading-relaxed text-[#3F3F46]">{log.message}</p>
                     )}

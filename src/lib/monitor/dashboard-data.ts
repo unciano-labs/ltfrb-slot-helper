@@ -22,6 +22,7 @@ import {
   type SlotMovementEvent,
   type SnapshotHistoryRow,
 } from "@/lib/monitor/slot-analytics";
+import { normalizeSubmissionLogRow } from "@/lib/monitor/submission-trigger";
 import { getAuthenticatedUser } from "@/lib/supabase/auth-server";
 import { getTenantContext } from "@/lib/supabase/server";
 
@@ -174,7 +175,7 @@ export async function loadDashboardData(options?: {
         .select("*")
         .eq("website_id", websiteId)
         .order("started_at", { ascending: false })
-        .limit(10),
+        .limit(40),
     ]);
 
     if (authUser) {
@@ -225,7 +226,7 @@ export async function loadDashboardData(options?: {
               .eq("website_id", websiteId)
               .eq("user_id", user.id)
               .order("attempted_at", { ascending: false })
-              .limit(20),
+              .limit(40),
             supabase
               .from("ltfrb_user_preferences")
               .select("monitored_franchise_codes")
@@ -294,7 +295,9 @@ export async function loadDashboardData(options?: {
       watchRules = (rulesRes.data as WatchRule[] | null) ?? [];
       recentNotifications = (notifRes.data as NotificationLogSummary[] | null) ?? [];
       reservationProfiles = (profilesRes.data as ApplicationProfile[] | null) ?? [];
-      submissionLogs = (logsRes.data as SubmissionLogRow[] | null) ?? [];
+      submissionLogs = ((logsRes.data as Array<Record<string, unknown>> | null) ?? []).map(
+        normalizeSubmissionLogRow
+      );
       monitoredFranchiseCodes =
         (prefRes.data?.monitored_franchise_codes as string[] | undefined) ?? [];
       savedAccount = (acctRes.data as SavedAccountSummary | null) ?? null;

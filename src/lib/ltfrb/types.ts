@@ -119,6 +119,12 @@ export interface ApplicationProfile {
   updated_at: string;
 }
 
+export type SubmissionTriggerType =
+  | "slot_increased"
+  | "scheduled_hours"
+  | "hourly"
+  | "manual";
+
 export interface SubmissionLogRow {
   id: string;
   application_profile_id: string;
@@ -127,6 +133,8 @@ export interface SubmissionLogRow {
   result: "success" | "full_slot" | "auth_error" | "validation_error" | "network_error";
   reference_number: string | null;
   message: string | null;
+  trigger_type?: SubmissionTriggerType | null;
+  trigger_detail?: string | null;
 }
 
 export interface RawFranchiseTypeItem {

@@ -4,6 +4,7 @@ import { validateApplicationUnits } from "@/lib/ltfrb/client";
 import type { VehicleUnitInput } from "@/lib/ltfrb/types";
 import { assertUserCanManageAutomation } from "@/lib/monitor/entitlements";
 import { isFranchiseAllowedForAccount } from "@/lib/monitor/preferences";
+import { normalizeSubmissionLogRow } from "@/lib/monitor/submission-trigger";
 import { getAuthenticatedUser } from "@/lib/supabase/auth-server";
 import { getTenantContext } from "@/lib/supabase/server";
 
@@ -33,16 +34,20 @@ export async function GET() {
       .eq("website_id", websiteId)
       .eq("user_id", user.id)
       .order("attempted_at", { ascending: false })
-      .limit(20),
+      .limit(40),
   ]);
 
   if (profilesRes.error) {
     return NextResponse.json({ error: profilesRes.error.message }, { status: 500 });
   }
 
+  const normalizedLogs = ((logsRes.data as Array<Record<string, unknown>> | null) ?? []).map(
+    normalizeSubmissionLogRow
+  );
+
   return NextResponse.json({
     profiles: profilesRes.data ?? [],
-    logs: logsRes.data ?? [],
+    logs: normalizedLogs,
   });
 }
 

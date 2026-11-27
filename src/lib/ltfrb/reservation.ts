@@ -7,7 +7,16 @@ import {
   verifyDocumentUrlAccessible,
   type SubmissionOutcomeType,
 } from "@/lib/ltfrb/client";
-import type { ApplicationProfile, UnitDocumentKey, VehicleUnitInput } from "@/lib/ltfrb/types";
+import type {
+  ApplicationProfile,
+  SubmissionTriggerType,
+  UnitDocumentKey,
+  VehicleUnitInput,
+} from "@/lib/ltfrb/types";
+import {
+  attachTriggerToRawResponse,
+  type SubmissionTriggerMeta,
+} from "@/lib/monitor/submission-trigger";
 import { sendSubmissionOutcomeEmail } from "@/lib/notifications/email";
 import { decryptSecret, encryptSecret } from "@/lib/security/crypto";
 import { getTenantContext } from "@/lib/supabase/server";
@@ -61,12 +70,57 @@ const ALL_DOCUMENT_KEYS: UnitDocumentKey[] = [
   "unit_photo_file",
 ];
 
+async function insertSubmissionLog(
+  supabase: SupabaseClient,
+  row: {
+    website_id: string;
+    user_id: string;
+    application_profile_id: string;
+    watch_rule_id: string | null;
+    http_status?: number | null;
+    result: string;
+    reference_number?: string | null;
+    message: string;
+    raw_response?: unknown;
+  },
+  triggerMeta: SubmissionTriggerMeta | null
+): Promise<void> {
+  const payload = triggerMeta
+    ? {
+        ...row,
+        trigger_type: triggerMeta.triggerType,
+        trigger_detail: triggerMeta.triggerDetail,
+      }
+    : row;
+
+  const { error } = await supabase.from("ltfrb_submission_logs").insert(payload);
+
+  // Graceful fallback if migration 007 (trigger_type / trigger_detail columns) is not applied yet
+  if (error && triggerMeta && (error.code === "42703" || error.code === "PGRST204")) {
+    await supabase.from("ltfrb_submission_logs").insert({
+      ...row,
+      raw_response: attachTriggerToRawResponse(row.raw_response, triggerMeta),
+    });
+  }
+}
+
 export async function attemptSlotReservation(
-  params: { profileId: string; userId?: string },
+  params: {
+    profileId: string;
+    userId?: string;
+    triggerType?: SubmissionTriggerType;
+    triggerDetail?: string;
+  },
   deps: ReservationDeps = DEFAULT_DEPS
 ): Promise<ReservationAttemptSummary> {
   const { supabase, websiteId } = deps.getContext();
   const now = new Date().toISOString();
+  const triggerMeta: SubmissionTriggerMeta | null = params.triggerType
+    ? {
+        triggerType: params.triggerType,
+        triggerDetail: params.triggerDetail ?? "",
+      }
+    : null;
 
   // 1. Acquire atomic lock: idle -> submitting
   let lockQuery = supabase
@@ -170,14 +224,18 @@ export async function attemptSlotReservation(
       const refreshed = await refreshToken();
       if (!refreshed.ok || !refreshed.token) {
         const msg = refreshed.message ?? "Could not sign in to LTFRB with your saved credentials.";
-        await supabase.from("ltfrb_submission_logs").insert({
-          website_id: websiteId,
-          user_id: profile.user_id,
-          application_profile_id: profile.id,
-          watch_rule_id: profile.watch_rule_id,
-          result: "auth_error",
-          message: msg,
-        });
+        await insertSubmissionLog(
+          supabase,
+          {
+            website_id: websiteId,
+            user_id: profile.user_id,
+            application_profile_id: profile.id,
+            watch_rule_id: profile.watch_rule_id,
+            result: "auth_error",
+            message: msg,
+          },
+          triggerMeta
+        );
         await releaseLock("idle", { last_error: msg });
         const emailTo = profile.notify_email || (accountRow.ltfrb_email as string);
         if (emailTo) {
@@ -230,14 +288,18 @@ export async function attemptSlotReservation(
         if (!backupPath) {
           const unitLabel = workingUnits.length > 1 ? `Unit ${i + 1} ` : "";
           const msg = `${unitLabel}uploaded PDF (${docKey}) expired on LTFRB and no backup copy exists. Please open Auto-Reserve and re-upload that PDF once so future submissions can auto-refresh it.`;
-          await supabase.from("ltfrb_submission_logs").insert({
-            website_id: websiteId,
-            user_id: profile.user_id,
-            application_profile_id: profile.id,
-            watch_rule_id: profile.watch_rule_id,
-            result: "validation_error",
-            message: msg,
-          });
+          await insertSubmissionLog(
+            supabase,
+            {
+              website_id: websiteId,
+              user_id: profile.user_id,
+              application_profile_id: profile.id,
+              watch_rule_id: profile.watch_rule_id,
+              result: "validation_error",
+              message: msg,
+            },
+            triggerMeta
+          );
           await releaseLock("idle", { is_armed: false, last_error: msg });
           const notifyAddr = profile.notify_email || (accountRow.ltfrb_email as string);
           if (notifyAddr) {
@@ -267,14 +329,18 @@ export async function attemptSlotReservation(
         if (!backup) {
           const unitLabel = workingUnits.length > 1 ? `Unit ${i + 1} ` : "";
           const msg = `${unitLabel}backup PDF (${docKey}) could not be read from storage. Please re-upload the PDF under Auto-Reserve.`;
-          await supabase.from("ltfrb_submission_logs").insert({
-            website_id: websiteId,
-            user_id: profile.user_id,
-            application_profile_id: profile.id,
-            watch_rule_id: profile.watch_rule_id,
-            result: "validation_error",
-            message: msg,
-          });
+          await insertSubmissionLog(
+            supabase,
+            {
+              website_id: websiteId,
+              user_id: profile.user_id,
+              application_profile_id: profile.id,
+              watch_rule_id: profile.watch_rule_id,
+              result: "validation_error",
+              message: msg,
+            },
+            triggerMeta
+          );
           await releaseLock("idle", { is_armed: false, last_error: msg });
           return {
             profileId: profile.id,
@@ -309,15 +375,19 @@ export async function attemptSlotReservation(
               ? "auth_error"
               : "network_error";
           const msg = `Could not re-upload expired ${docKey} to LTFRB before submitting: ${reupload.message}`;
-          await supabase.from("ltfrb_submission_logs").insert({
-            website_id: websiteId,
-            user_id: profile.user_id,
-            application_profile_id: profile.id,
-            watch_rule_id: profile.watch_rule_id,
-            http_status: reupload.httpStatus,
-            result: outcomeType,
-            message: msg,
-          });
+          await insertSubmissionLog(
+            supabase,
+            {
+              website_id: websiteId,
+              user_id: profile.user_id,
+              application_profile_id: profile.id,
+              watch_rule_id: profile.watch_rule_id,
+              http_status: reupload.httpStatus,
+              result: outcomeType,
+              message: msg,
+            },
+            triggerMeta
+          );
           await releaseLock("idle", { last_error: msg });
           return {
             profileId: profile.id,
@@ -388,17 +458,21 @@ export async function attemptSlotReservation(
       }
     }
 
-    await supabase.from("ltfrb_submission_logs").insert({
-      website_id: websiteId,
-      user_id: profile.user_id,
-      application_profile_id: profile.id,
-      watch_rule_id: profile.watch_rule_id,
-      http_status: outcome.httpStatus,
-      result: outcome.result,
-      reference_number: outcome.referenceNumber,
-      message: outcome.message,
-      raw_response: outcome.rawResponse,
-    });
+    await insertSubmissionLog(
+      supabase,
+      {
+        website_id: websiteId,
+        user_id: profile.user_id,
+        application_profile_id: profile.id,
+        watch_rule_id: profile.watch_rule_id,
+        http_status: outcome.httpStatus,
+        result: outcome.result,
+        reference_number: outcome.referenceNumber,
+        message: outcome.message,
+        raw_response: outcome.rawResponse,
+      },
+      triggerMeta
+    );
 
     const safetyStopStatuses = new Set([403, 409, 429]);
     const shouldSafetyStop =

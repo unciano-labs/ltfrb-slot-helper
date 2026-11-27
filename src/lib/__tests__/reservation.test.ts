@@ -259,7 +259,12 @@ describe("atomic slot reservation lock and outcomes", () => {
     });
 
     const outcome = await attemptSlotReservation(
-      { profileId: "prof-1", userId: "user-1" },
+      {
+        profileId: "prof-1",
+        userId: "user-1",
+        triggerType: "slot_increased",
+        triggerDetail: "Triggered by slot increase (4 → 5, +1) on Nov 27, 3:00 PM",
+      },
       deps
     );
 
@@ -269,6 +274,8 @@ describe("atomic slot reservation lock and outcomes", () => {
     assert.equal(state.profile.is_armed, true);
     assert.equal(state.logs.length, 1);
     assert.equal(state.logs[0].result, "full_slot");
+    assert.equal(state.logs[0].trigger_type, "slot_increased");
+    assert.match(String(state.logs[0].trigger_detail), /slot increase/i);
   });
 
   it("refreshes expired token on 401 auth_error and retries once", async () => {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { attemptSlotReservation } from "@/lib/ltfrb/reservation";
 import { assertUserCanManageAutomation } from "@/lib/monitor/entitlements";
+import { formatManilaShortTimestamp } from "@/lib/monitor/submission-trigger";
 import { getAuthenticatedUser } from "@/lib/supabase/auth-server";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,8 @@ export async function POST(request: NextRequest) {
   const summary = await attemptSlotReservation({
     profileId,
     userId: user.id,
+    triggerType: "manual",
+    triggerDetail: `Triggered manually from dashboard on ${formatManilaShortTimestamp(new Date())}`,
   });
 
   return NextResponse.json({ ok: summary.result === "success", summary });

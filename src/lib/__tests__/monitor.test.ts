@@ -17,6 +17,11 @@ import {
   matchesWatchRule,
   shouldAutoSubmitProfile,
 } from "@/lib/monitor/rules";
+import {
+  attachTriggerToRawResponse,
+  formatSubmissionTriggerDisplay,
+  normalizeSubmissionLogRow,
+} from "@/lib/monitor/submission-trigger";
 import { decryptSecret, encryptSecret, verifyCronBearerToken } from "@/lib/security/crypto";
 
 describe("crypto security helpers", () => {
@@ -303,27 +308,26 @@ describe("LTFRB normalizers and watch rules", () => {
       false
     );
 
-    // Increased 4 -> 5 triggers immediately
-    assert.equal(
-      shouldAutoSubmitProfile({
-        profile: {
-          is_armed: true,
-          lock_status: "idle",
-          franchise_type_code: "E_TNVS",
-          region_name: "National Capital Region (NCR)",
-          province_name: null,
-          number_of_units: 1,
-          submit_on_slot_increase: true,
-          submit_at_midnight: false,
-          submit_hourly: false,
-          last_attempted_at: null,
-        },
-        allSlots: [slotOpen],
-        prevRemainingMap: new Map([[slotOpen.slotKey, 4]]),
-        now: new Date("2026-11-27T06:00:00Z"),
-      }).reason,
-      "slot_increased"
-    );
+    // Increased 4 -> 5 triggers immediately with trigger detail
+    const incDecision = shouldAutoSubmitProfile({
+      profile: {
+        is_armed: true,
+        lock_status: "idle",
+        franchise_type_code: "E_TNVS",
+        region_name: "National Capital Region (NCR)",
+        province_name: null,
+        number_of_units: 1,
+        submit_on_slot_increase: true,
+        submit_at_midnight: false,
+        submit_hourly: false,
+        last_attempted_at: null,
+      },
+      allSlots: [slotOpen],
+      prevRemainingMap: new Map([[slotOpen.slotKey, 4]]),
+      now: new Date("2026-11-27T06:00:00Z"),
+    });
+    assert.equal(incDecision.reason, "slot_increased");
+    assert.match(incDecision.triggerDetail ?? "", /slot increase \(4 → 5, \+1/i);
 
     // Scheduled hours: 12:05 AM PHT (16:05 UTC), 7:10 AM PHT (23:10 UTC), 8:05 AM PHT (00:05 UTC)
     for (const utcIso of [
@@ -331,26 +335,25 @@ describe("LTFRB normalizers and watch rules", () => {
       "2026-11-27T23:10:00Z", // 07:10 PHT
       "2026-11-28T00:05:00Z", // 08:05 PHT
     ]) {
-      assert.equal(
-        shouldAutoSubmitProfile({
-          profile: {
-            is_armed: true,
-            lock_status: "idle",
-            franchise_type_code: "E_TNVS",
-            region_name: "National Capital Region (NCR)",
-            province_name: null,
-            number_of_units: 1,
-            submit_on_slot_increase: false,
-            submit_at_midnight: true,
-            submit_hourly: false,
-            last_attempted_at: null,
-          },
-          allSlots: [],
-          prevRemainingMap: new Map(),
-          now: new Date(utcIso),
-        }).reason,
-        "scheduled_hours"
-      );
+      const schedDecision = shouldAutoSubmitProfile({
+        profile: {
+          is_armed: true,
+          lock_status: "idle",
+          franchise_type_code: "E_TNVS",
+          region_name: "National Capital Region (NCR)",
+          province_name: null,
+          number_of_units: 1,
+          submit_on_slot_increase: false,
+          submit_at_midnight: true,
+          submit_hourly: false,
+          last_attempted_at: null,
+        },
+        allSlots: [],
+        prevRemainingMap: new Map(),
+        now: new Date(utcIso),
+      });
+      assert.equal(schedDecision.reason, "scheduled_hours");
+      assert.match(schedDecision.triggerDetail ?? "", /scheduled TIME/i);
     }
 
     // Outside 12MN/7AM/8AM (9:05 AM PHT = 01:05 UTC) or duplicate within 25 mins skips
@@ -570,5 +573,48 @@ describe("LTFRB normalizers and watch rules", () => {
       now: new Date("2026-11-27T06:00:00Z"),
     });
     assert.equal(wrongRegionDecision.shouldSubmit, false);
+  });
+
+  it("normalizes submission log triggers from columns or raw_response fallback", () => {
+    const colRow = normalizeSubmissionLogRow({
+      id: "log-1",
+      application_profile_id: "prof-1",
+      attempted_at: "2026-11-27T08:42:00Z",
+      http_status: 422,
+      result: "full_slot",
+      reference_number: null,
+      message: "Full",
+      trigger_type: "slot_increased",
+      trigger_detail: "Triggered by slot increase (381 → 383, +2) on Nov 27, 4:42 PM",
+    });
+    assert.equal(colRow.trigger_type, "slot_increased");
+    assert.equal(
+      formatSubmissionTriggerDisplay(colRow).badgeLabel,
+      "Triggered by Slot Increase"
+    );
+
+    const fallbackRaw = attachTriggerToRawResponse(
+      { errors: [{ status: "422" }] },
+      {
+        triggerType: "scheduled_hours",
+        triggerDetail: "Triggered by scheduled TIME (7:00 AM Manila) at Nov 27, 7:00 AM",
+      }
+    );
+    const fbRow = normalizeSubmissionLogRow({
+      id: "log-2",
+      application_profile_id: "prof-1",
+      attempted_at: "2026-11-26T23:00:00Z",
+      http_status: 422,
+      result: "full_slot",
+      reference_number: null,
+      message: "Full",
+      raw_response: fallbackRaw,
+    });
+    assert.equal(fbRow.trigger_type, "scheduled_hours");
+    assert.equal(
+      formatSubmissionTriggerDisplay(fbRow).badgeLabel,
+      "Triggered by Scheduled TIME"
+    );
+    assert.match(formatSubmissionTriggerDisplay(fbRow).detailText ?? "", /7:00 AM/);
   });
 });
